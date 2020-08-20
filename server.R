@@ -21,29 +21,23 @@ options(shiny.maxRequestSize = 3000*1024^2)
 
 server <- function(input, output, session) {
   ##### RAWDATA INPUT AND TABLES #####
-  # Choose desc file and data file
-  shinyFileChoose(input, 'DESCFILE', roots=c(wd='.')) 
-  shinyFileChoose(input, 'DATAFILE', roots=c(wd='.')) 
-  
   # Parse the desc file path and read the table
   desc <- reactive({
-    validate(need(expr = input$DESCFILE, "Please select a description file"))
-    descfile <- parseFilePaths(roots=c(wd='.'), input$DESCFILE)
-    if(NROW(descfile)) {
-      desc <- read.table(descfile$datapath, 
-                         quote = input$QUOTE, 
-                         sep = input$SEP, 
-                         header = input$HEADER, 
-                         fill = FALSE, 
-                         as.is=TRUE)
-    } 
+    req(input$DESCFILE)
+    desc <- read.table(input$DESCFILE$datapath, 
+                       quote = input$QUOTE, 
+                       sep = input$SEP, 
+                       header = input$HEADER, 
+                       fill = FALSE, 
+                       as.is=TRUE)
   })
   
-  # Parse and read the data file
+  # Upload and read the data file
   readData <- reactive({
-    validate(need(expr = input$DATAFILE, "Please select raw data files"))
-    readData <- parseFilePaths(roots=c(wd='.'), input$DATAFILE)
-    Data <- ReadAffy(filenames = as.character(readData$datapath))
+    req(input$DATAFILE)
+    unzz <- unzip(input$DATAFILE$datapath)
+    print(unzz)
+    Data <- ReadAffy(filenames = unzz)
     return(Data)
   }) 
   
@@ -54,6 +48,7 @@ server <- function(input, output, session) {
   
   # Sample of the raw data
   output$rawdata <- renderTable({
+    req(readData())
     head(exprs(readData()),10)
   })
   
