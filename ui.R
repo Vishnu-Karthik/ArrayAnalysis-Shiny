@@ -1,23 +1,22 @@
 library(shiny)
-library(shinyFiles)
 library(shinythemes)
 library(shinycssloaders)
 library(shinyMatrix)
 
 navbarPage(theme = shinytheme("flatly"),
-  "Application Title",
+  "ArrayAnalysis",
   id = "Mainset",
   navbarMenu("Workflow",
              tabPanel("Data Input",
                 sidebarLayout(
                   sidebarPanel(
                     width = 2,
-                    shinyFilesButton(id = 'DESCFILE',label = 'Choose description file',title = 'Please select a description file',multiple =  FALSE),
+                    fileInput(inputId = "DESCFILE", "Please select description file"),
                     checkboxInput(inputId = "HEADER",label =  "Header",value = TRUE),
                     radioButtons(inputId =  "SEP",label = "Separator",choices = c(Comma = ",", Semicolon = ";", Tab = "\t"),selected = "\t"),
                     radioButtons(inputId = "QUOTE",label = "Quote",choices = c(None = "", "Double Quote" = '"', "Single Quote" = "'")),
                     tags$hr(),
-                    shinyFilesButton('DATAFILE', 'Raw Data Select', 'Please select all the datafiles', multiple = TRUE),
+                    fileInput(inputId = "DATAFILE", "Please select .zip data file", accept = ".zip"),
                     tags$br(),
                     tags$br(),
                     actionButton(inputId = "next2",label = 'Next',icon = icon("arrow-right"))
@@ -42,10 +41,11 @@ navbarPage(theme = shinytheme("flatly"),
                       actionButton(inputId = "next3",label = 'Next',icon = icon("arrow-right"))
                     ),
                     mainPanel(
-                      withSpinner(plotOutput(outputId = "sampleprep",height = "100%", width = "100%"), type = 8),
-                      withSpinner(plotOutput(outputId = "ratioplot",height = "100%", width = "100%"), type = 8),
-                      withSpinner(plotOutput(outputId = "ratioplot2",height = "100%", width = "100%"), type = 8),
-                      withSpinner(plotOutput(outputId = "rnadegplot",height = "100%", width = "100%"), type = 8)
+                      withSpinner(uiOutput(outputId = "sampleQuality"), type = 8)
+                      #withSpinner(plotOutput(outputId = "sampleprep",height = "100%", width = "100%"), type = 8),
+                      #withSpinner(plotOutput(outputId = "ratioplot",height = "100%", width = "100%"), type = 8),
+                      #withSpinner(plotOutput(outputId = "ratioplot2",height = "100%", width = "100%"), type = 8),
+                      #withSpinner(plotOutput(outputId = "rnadegplot",height = "100%", width = "100%"), type = 8)
                     )
                   )
                 ),
@@ -139,7 +139,7 @@ navbarPage(theme = shinytheme("flatly"),
                       selectInput(inputId = "species",label = "Species",choices = c("Anopheles gambiae","Arabidopsis thaliana","Bos taurus","Caenorhabditis elegans","Canis familiaris", "Danio rerio","Drosophila melanogaster","Gallus gallus","Homo sapiens","Macaca mulatta","Mus musculus", "Oryza sativa","Rattus norvegicus","Saccharomyces cerevisiae","Schizosaccharomyces pombe","Sus scrofa"), selected = "Homo sapiens"),
                       checkboxInput(inputId = "customCDF", label = "Custom annotation file (CDF)", value = FALSE),
                       selectInput(inputId = "CDFtype",label = "Annotation format",choices = c("ENTREZG","REFSEQ","ENSG","ENSE","ENST","VEGAG","VEGAE","VEGAT","TAIRG","TAIRT","UG","MIRBASEF","MIRBASEG")),
-                      selectInput(inputId = "perGroup", label = "Normalization per experimental group or using all arrays", choices = c("group","dataset")),
+                      selectInput(inputId = "perGroup", label = "Normalization per experimental group or using all arrays", choices = c("dataset","group")),
                       actionButton(inputId = "preprocessing",label = "Run preprocessing", icon = icon("refresh")),
                       tags$br(),
                       tags$br(),
@@ -204,9 +204,9 @@ navbarPage(theme = shinytheme("flatly"),
                   actionButton(inputId = "next10",label = 'Next',icon = icon("arrow-right"))
                 ),
                 mainPanel(
-                  withSpinner(uiOutput("statOutput", style="width: 100% ; height: 100%"), type = 8),
+                  withSpinner(uiOutput("statOutput"), type = 8),
                   #withSpinner(plotOutput("pValhist",height = "100%", width = "100%"), type = 8),
-                  withSpinner(plotOutput("logFChist",height = "100%", width = "100%"), type = 8)
+                  #withSpinner(plotOutput("logFChist",height = "100%", width = "100%"), type = 8)
                 )
               )
              ),
