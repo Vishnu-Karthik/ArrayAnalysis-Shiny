@@ -22,8 +22,9 @@ navbarPage(theme = shinytheme("flatly"),
                     actionButton(inputId = "next2",label = 'Next',icon = icon("arrow-right"))
                   ),
                   mainPanel(
-                    withSpinner(tableOutput("desc"), type = 8),
-                    withSpinner(tableOutput("rawdata"), type = 8)
+                    tableOutput("desc"),
+                    tableOutput("rawdata"),
+                    textOutput("CDFnotify")
                   )
                 )  
              ),
@@ -34,18 +35,15 @@ navbarPage(theme = shinytheme("flatly"),
                     sidebarPanel(
                       width = 2,
                       tags$b("Sample Quality"),
-                      checkboxInput(inputId = "sampleprep",label =  "Sample prep controls",value = FALSE),
-                      checkboxInput(inputId = "ratioplot",label = "3'/5' ratio",value = FALSE),
-                      checkboxInput(inputId = "rnadegplot",label = "RNA degradation",value = FALSE),
+                      uiOutput(outputId = "sqInputs"),
                       actionButton(inputId = "prev1",label = 'Prev',icon = icon("arrow-left")),
                       actionButton(inputId = "next3",label = 'Next',icon = icon("arrow-right"))
                     ),
                     mainPanel(
-                      withSpinner(uiOutput(outputId = "sampleQuality"), type = 8)
-                      #withSpinner(plotOutput(outputId = "sampleprep",height = "100%", width = "100%"), type = 8),
-                      #withSpinner(plotOutput(outputId = "ratioplot",height = "100%", width = "100%"), type = 8),
-                      #withSpinner(plotOutput(outputId = "ratioplot2",height = "100%", width = "100%"), type = 8),
-                      #withSpinner(plotOutput(outputId = "rnadegplot",height = "100%", width = "100%"), type = 8)
+                      plotOutput(outputId = "sampleprep",height = "100%", width = "100%"),
+                      plotOutput(outputId = "ratioplot",height = "100%", width = "100%"),
+                      plotOutput(outputId = "ratioplot2",height = "100%", width = "100%"),
+                      plotOutput(outputId = "rnadegplot",height = "100%", width = "100%")
                     )
                   )
                 ),
@@ -54,18 +52,15 @@ navbarPage(theme = shinytheme("flatly"),
                     sidebarPanel(
                       width = 2,
                       tags$b("Hybridization and overall signal quality"),
-                      checkboxInput(inputId = "hybrid",label = "Spike-In controls",value = FALSE),
-                      checkboxInput(inputId = "percentpresent",label = "Percent present",value = FALSE),
-                      checkboxInput(inputId = "posnegdistro",label = "Positive/Negative controls",value = FALSE),
-                      checkboxInput(inputId = "backgroundintensity",label = "Background intensity",value = FALSE),
+                      uiOutput("hybridInput"),
                       actionButton(inputId = "prev2",label = 'Prev',icon = icon("arrow-left")),
                       actionButton(inputId = "next4",label = 'Next',icon = icon("arrow-right"))
                     ),
                     mainPanel(
-                      withSpinner(plotOutput("hybrid",height = "100%", width = "100%"), type = 8),
-                      withSpinner(plotOutput("percentpresent",height = "100%", width = "100%"), type = 8),
-                      withSpinner(plotOutput("posnegdistro",height = "100%", width = "100%"), type = 8),
-                      withSpinner(plotOutput("backgroundintensity",height = "100%", width = "100%"), type = 8)
+                      plotOutput("hybrid",height = "100%", width = "100%"),
+                      plotOutput("percentpresent",height = "100%", width = "100%"),
+                      plotOutput("posnegdistro",height = "100%", width = "100%"),
+                      plotOutput("backgroundintensity",height = "100%", width = "100%")
                     )
                   )
                 ),
@@ -74,17 +69,14 @@ navbarPage(theme = shinytheme("flatly"),
                     sidebarPanel(
                       width = 2,
                       tags$b("Signal Distribution"),
-                      checkboxInput(inputId = "scalefactors",label = "Scale Factors",value =  FALSE),
-                      checkboxInput(inputId = "boxplotRaw",label = "Boxplot",value = FALSE),
-                      checkboxInput(inputId = "densityRaw",label = "Density histogram",value =  FALSE),
-                      checkboxInput(inputId = "controlplot",label = "Control profiles and affx boxplots",value = FALSE),
-                      tags$b("Intensity-dependent bias"),
-                      checkboxInput(inputId = "MAraw",label = "MA plot",value = FALSE),
+                      uiOutput("signalInput"),
+                      #tags$b("Intensity-dependent bias"),
+                      #checkboxInput(inputId = "MAraw",label = "MA plot",value = FALSE),
                       tags$b("Spatial bias"),
                       checkboxInput(inputId = "layoutplot",label = "Array reference layout",value = FALSE),
                       checkboxInput(inputId = "posnegCOI",label = "Pos/Neg Center of intensity",value = FALSE),
-                      checkboxInput(inputId = "spatialimages",label = "2D Images",value = FALSE),
-                      checkboxInput(inputId = "PLMimage",label = "All PLM based images",value = FALSE),
+                      #checkboxInput(inputId = "spatialimages",label = "2D Images",value = FALSE),
+                      #checkboxInput(inputId = "PLMimage",label = "All PLM based images",value = FALSE),
                       tags$b("Probe-set homogeneity"),
                       checkboxInput(inputId = "Nuse",label = "NUSE plot",value = FALSE),
                       checkboxInput(inputId = "RLE",label = "RLE plot",value = FALSE),
@@ -92,18 +84,18 @@ navbarPage(theme = shinytheme("flatly"),
                       actionButton(inputId = "next5",label = 'Next',icon = icon("arrow-right"))
                     ),
                     mainPanel(
-                      withSpinner(plotOutput("scalefactors",height = "100%", width = "100%"), type = 8),
-                      withSpinner(plotOutput("boxplotRaw",height = "100%", width = "100%"), type = 8),
-                      withSpinner(plotOutput("densityRaw",height = "100%", width = "100%"), type = 8),
-                      withSpinner(plotOutput("controlplotaffx",height = "100%", width = "100%"), type = 8),
-                      withSpinner(plotOutput("controlplotbox",height = "100%", width = "100%"), type = 8),
-                      #withSpinner(plotOutput("rawMAplot",height = "100%", width = "100%"), type = 8),
-                      withSpinner(plotOutput("layoutplot",height = "100%", width = "100%"), type = 8),
-                      withSpinner(plotOutput("posnegCOI",height = "100%", width = "100%"), type = 8),
-                      #withSpinner(plotOutput("spatialImages",height = "100%", width = "100%"), type = 8),
-                      #withSpinner(plotOutput("PLMimages",height = "100%", width = "100%"), type = 8),
-                      withSpinner(plotOutput("rawNuse",height = "100%", width = "100%"), type = 8),
-                      withSpinner(plotOutput("rawRle",height = "100%", width = "100%"), type = 8)
+                      plotOutput("scalefactors",height = "100%", width = "100%"),
+                      plotOutput("boxplotRaw",height = "100%", width = "100%"),
+                      plotOutput("densityRaw",height = "100%", width = "100%"),
+                      plotOutput("controlplotaffx",height = "100%", width = "100%"),
+                      plotOutput("controlplotbox",height = "100%", width = "100%"),
+                      #plotOutput("rawMAplot",height = "100%", width = "100%"),
+                      plotOutput("layoutplot",height = "100%", width = "100%"),
+                      plotOutput("posnegCOI",height = "100%", width = "100%"),
+                      #plotOutput("spatialImages",height = "100%", width = "100%"),
+                      #plotOutput("PLMimages",height = "100%", width = "100%"),
+                      plotOutput("rawNuse",height = "100%", width = "100%"),
+                      plotOutput("rawRle",height = "100%", width = "100%")
                     )
                   )
                 ),
@@ -121,9 +113,9 @@ navbarPage(theme = shinytheme("flatly"),
                       actionButton(inputId = "next6",label = 'Next',icon = icon("arrow-right"))
                     ),
                     mainPanel(
-                      withSpinner(plotOutput("correlRaw",height = "100%", width = "100%"), type = 8),
-                      withSpinner(plotOutput("PCAraw",height = "100%", width = "100%"), type = 8),
-                      withSpinner(plotOutput("clusterRaw",height = "100%", width = "100%"), type = 8)
+                      plotOutput("correlRaw",height = "100%", width = "100%"),
+                      plotOutput("PCAraw",height = "100%", width = "100%"),
+                      plotOutput("clusterRaw",height = "100%", width = "100%")
                     )
                   )
                 )
@@ -147,7 +139,7 @@ navbarPage(theme = shinytheme("flatly"),
                       actionButton(inputId = "next7", label = 'Next',icon = icon("arrow-right"))
                     ),
                     mainPanel(
-                      withSpinner(tableOutput("normdatatable"), type = 8)
+                      tableOutput("normdatatable")
                     )
                   )
                 ),
@@ -163,9 +155,9 @@ navbarPage(theme = shinytheme("flatly"),
                       actionButton(inputId = "next8", label = 'Next',icon = icon("arrow-right"))
                     ),
                     mainPanel(
-                      withSpinner(plotOutput("boxplotNorm",height = "100%", width = "100%"), type = 8),
-                      withSpinner(plotOutput("densityNorm",height = "100%", width = "100%"), type = 8),
-                      withSpinner(plotOutput("MAnorm",height = "100%", width = "100%"), type = 8)
+                      plotOutput("boxplotNorm",height = "100%", width = "100%"),
+                      plotOutput("densityNorm",height = "100%", width = "100%"),
+                      plotOutput("MAnorm",height = "100%", width = "100%")
                     )
                   )
                 ),
@@ -181,9 +173,9 @@ navbarPage(theme = shinytheme("flatly"),
                       actionButton(inputId = "next9", label = 'Next',icon = icon("arrow-right"))
                     ),
                     mainPanel(
-                      withSpinner(plotOutput("correlNorm", height = "100%", width = "100%"), type = 8),
-                      withSpinner(plotOutput("PCAnorm",height = "100%", width = "100%"), type = 8),
-                      withSpinner(plotOutput("clusterNorm",height = "100%", width = "100%"), type = 8)
+                      plotOutput("correlNorm", height = "100%", width = "100%"),
+                      plotOutput("PCAnorm",height = "100%", width = "100%"),
+                      plotOutput("clusterNorm",height = "100%", width = "100%")
                     )
                   ) 
                 )
@@ -204,9 +196,9 @@ navbarPage(theme = shinytheme("flatly"),
                   actionButton(inputId = "next10",label = 'Next',icon = icon("arrow-right"))
                 ),
                 mainPanel(
-                  withSpinner(uiOutput("statOutput"), type = 8),
-                  #withSpinner(plotOutput("pValhist",height = "100%", width = "100%"), type = 8),
-                  #withSpinner(plotOutput("logFChist",height = "100%", width = "100%"), type = 8)
+                  uiOutput("statOutput"),
+                  #plotOutput("pValhist",height = "100%", width = "100%"),
+                  #plotOutput("logFChist",height = "100%", width = "100%")
                 )
               )
              ),

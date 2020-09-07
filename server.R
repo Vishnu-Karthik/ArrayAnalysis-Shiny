@@ -14,7 +14,8 @@ package_list <- c("affy",
                   "biomaRt",
                   "limma",
                   "clusterProfiler",
-                  "org.Hs.eg.db")
+                  "org.Hs.eg.db",
+                  "ArrayTools")
 lapply(package_list, require, character.only = TRUE)
 
 options(shiny.maxRequestSize = 3000*1024^2)
@@ -47,106 +48,7 @@ server <- function(input, output, session) {
     head(exprs(readData()),10)
   })
   
-  ##### QC VAR VALUES #####
-  # Match the descriptions to the rawdata sample names
-  rawData <- reactive({
-    rawData <- readData()
-    description <- desc()
-    
-    file_order <- match(description[,1],sampleNames(rawData))
-    if(sum(is.na(file_order)) > 0) stop("file names in data directory and file names in description file do not match")
-    if(length(unique(file_order)) < length(file_order)) stop("file names in description file are not unique")
-    rawData <- rawData[,file_order]
-    
-    sampleNames(rawData)<- as.character(description[,2])
-    rawData <- addStandardCDFenv(rawData)
-    return(rawData)
-  })
-  
-  # Get the array type
-  aType <- reactive({
-    Data <- rawData()
-    aType <- "PMMM"  
-    
-    # Test whether the dataset is of aType "PM-only"
-    mismatches <- mm(Data[,1])  
-    
-    if(is.null(mismatches)) {
-      # mm does not exist
-      aType <- "PMonly"
-    } else {
-      if(sum(is.na(mismatches))>=length(mismatches)/2){ 
-        # mm is always NA or there are more NA values in the mm probes than 
-        # defined values (assuming these would just be controls)
-        aType <- "PMonly"
-      } else {
-        matches <- pm(Data[,1])
-        notNA <- !is.na(mismatches) & !is.na(matches)
-        if(sum(mismatches[notNA]!=matches[notNA])==0){
-          # MM contains a copy of PM, which indicates a PMonly array
-          aType <- "PMonly"
-        }
-      }
-    }
-    return(aType)
-  })
-  
-  # Get experiment factors
-  experimentFactor <- reactive({
-    description <- desc()
-    experimentFactor <- factor(description[,3])
-  })
-  
-  # Colors, symbols and dimensions for the plots
-  colList <- reactive({
-    experimentFactor <- experimentFactor()
-    
-    #check whether a factor has been provided
-    if(class(experimentFactor)!="factor") stop("Parameter 'experimentFactor' must be of class 'factor'")
-    
-    if(length(levels(experimentFactor))==1) {
-      #if there is only one group (or no groups are provided) take equally spread colors over the rainbow palette
-      plotColors <- rainbow(length(experimentFactor),s=.8,v=.7)
-      #set group legend color to white, as there is not a specific group color
-      legendColors <- "white"
-    } else {
-      #compute the number of colors needed for each class
-      tab.tmp <- table(experimentFactor)
-      
-      #set the two extreme colors for each class
-      colors.light <- rainbow(length(levels(experimentFactor)),s=1-sapply(tab.tmp,min,5)*.1)
-      colors.dark <- rainbow(length(levels(experimentFactor)),v=1-sapply(tab.tmp,min,5)*.14)
-      
-      #create the colors to plot, and colors for the legend (average one per experimental group)
-      plotColors <- NULL
-      legendColors <- NULL
-      for(l in 1:length(levels(experimentFactor))) {
-        colorFun <- colorRampPalette(c(colors.light[l],colors.dark[l]))
-        tmpColors <- colorFun(tab.tmp[l])
-        plotColors[experimentFactor==levels(experimentFactor)[l]] <- tmpColors
-        legendColors[l] <- tmpColors[ceiling(length(tmpColors)/2)]
-      }
-    }
-    return(list(plotColors=plotColors,legendColors=legendColors))
-  })
-  plotColors <- reactive({colList()$plotColors})
-  legendColors <- reactive({colList()$legendColors})
-  plotSymbols <- reactive({18-as.numeric(experimentFactor())})
-  legendSymbols <- reactive({sort(plotSymbols(), decreasing=TRUE)})
-  WIDTH <- 1000
-  HEIGHT <- 1414
-  POINTSIZE <- 24
-  POINTSIZE1 <- 12
-  MAXARRAY <- 41 
-  
-  # Fit a probe level model if a plot requires it
-  rawData.pset <- reactive({
-    rawData.pset <- NULL
-    req(input$spatialimages || input$PLMimage || input$Nuse || input$RLE)
-    rawData.pset <- fitPLM(rawData())                     
-  })
-  
-  # Add standardCDF
+  # Function to add standard CDF
   addStandardCDFenv <- function(Data, overwrite=FALSE) {
     #if overwrite is FALSE a cdf environment will be kept if already loaded
     #if overwrite is TRUE it will always be overwritten (unless none is found)
@@ -197,825 +99,899 @@ server <- function(input, output, session) {
     return(Data)
   }
   
-  ##### QC PLOTS #####
+  # Match the descriptions to the rawdata sample names and add standard env
+  rawData <- reactive({
+    rawData <- readData()
+    description <- desc()
+    
+    file_order <- match(description[,1],sampleNames(rawData))
+    if(sum(is.na(file_order)) > 0) stop("file names in data directory and file names in description file do not match")
+    if(length(unique(file_order)) < length(file_order)) stop("file names in description file are not unique")
+    rawData <- rawData[,file_order]
+    
+    sampleNames(rawData)<- as.character(description[,2])
+    rawData <- addStandardCDFenv(rawData)
+    return(rawData)
+  })
   
-  output$sampleQuality <- renderUI({
+  ##### PREREQUISITES FOR QC PLOTS #####
+  
+  # Get the array type
+  aType <- reactive({
+    Data <- rawData()
+    aType <- "PMMM"  
+    
+    # Test whether the dataset is of aType "PM-only"
+    mismatches <- mm(Data[,1])  
+    
+    if(is.null(mismatches)) {
+      # mm does not exist
+      aType <- "PMonly"
+    } else {
+      if(sum(is.na(mismatches))>=length(mismatches)/2){ 
+        # mm is always NA or there are more NA values in the mm probes than 
+        # defined values (assuming these would just be controls)
+        aType <- "PMonly"
+      } else {
+        matches <- pm(Data[,1])
+        notNA <- !is.na(mismatches) & !is.na(matches)
+        if(sum(mismatches[notNA]!=matches[notNA])==0){
+          # MM contains a copy of PM, which indicates a PMonly array
+          aType <- "PMonly"
+        }
+      }
+    }
+    return(aType)
+  })
+  
+  # Get experiment factors
+  experimentFactor <- reactive({
+    description <- desc()
+    experimentFactor <- factor(description[,3])
+  })
+  
+  # Create colors for plots and legend
+  colList <- reactive({
+    experimentFactor <- experimentFactor()
+    
+    #check whether a factor has been provided
+    if(class(experimentFactor)!="factor") stop("Parameter 'experimentFactor' must be of class 'factor'")
+    
+    if(length(levels(experimentFactor))==1) {
+      #if there is only one group (or no groups are provided) take equally spread colors over the rainbow palette
+      plotColors <- rainbow(length(experimentFactor),s=.8,v=.7)
+      #set group legend color to white, as there is not a specific group color
+      legendColors <- "white"
+    } else {
+      #compute the number of colors needed for each class
+      tab.tmp <- table(experimentFactor)
+      
+      #set the two extreme colors for each class
+      colors.light <- rainbow(length(levels(experimentFactor)),s=1-sapply(tab.tmp,min,5)*.1)
+      colors.dark <- rainbow(length(levels(experimentFactor)),v=1-sapply(tab.tmp,min,5)*.14)
+      
+      #create the colors to plot, and colors for the legend (average one per experimental group)
+      plotColors <- NULL
+      legendColors <- NULL
+      for(l in 1:length(levels(experimentFactor))) {
+        colorFun <- colorRampPalette(c(colors.light[l],colors.dark[l]))
+        tmpColors <- colorFun(tab.tmp[l])
+        plotColors[experimentFactor==levels(experimentFactor)[l]] <- tmpColors
+        legendColors[l] <- tmpColors[ceiling(length(tmpColors)/2)]
+      }
+    }
+    return(list(plotColors=plotColors,legendColors=legendColors))
+  })
+  
+  # Plot colors
+  plotColors <- reactive({colList()$plotColors})
+  
+  # Legend colros
+  legendColors <- reactive({colList()$legendColors})
+  
+  # Plot symbols
+  plotSymbols <- reactive({18-as.numeric(experimentFactor())})
+  
+  # Legend symbols
+  legendSymbols <- reactive({sort(plotSymbols(), decreasing=TRUE)})
+  
+  # Width of all the plots
+  WIDTH <- 1000
+  
+  # Height of all the plots
+  HEIGHT <- 1414
+  
+  # Point sizes for the plots
+  POINTSIZE <- 24
+  POINTSIZE1 <- 12
+  
+  # Maximum number of arrays that can be computed
+  MAXARRAY <- 41 
+  
+  # Fit a probe level model if a plot requires it
+  rawData.pset <- reactive({
+    rawData.pset <- NULL
+    req(input$spatialimages || input$PLMimage || input$Nuse || input$RLE)
+    rawData.pset <- fitPLM(rawData())                     
+  })
+
+  # Check for lys
+  lys <- reactive({
+    lys<-NULL
+    if(is.null(lys)) {
+      try({calls<-detection.p.val(rawData())$call
+      lys<-calls[rownames(calls)[grep("lys.*3",rownames(calls), ignore.case = TRUE)],]
+      rm(calls)},TRUE)
+      if(!is.null(lys)) {
+        if(length(lys) > length(sampleNames(rawData()))) 
+        { lys<-lys[1,] }
+      }
+    }
+    return(lys)
+  })
+  
+  # Check for sprep
+  sprep <- reactive({
+    sprep<-NULL
+    if(!is.null(lys) && is.null(sprep)) {
+      try(yack <- yaqc(rawData()),TRUE) 
+      if(exists("yack")) {
+        spnames<-rownames(yack@morespikes[grep("(lys|phe|thr|dap).*3", # only 3' !
+                                               rownames(yack@morespikes), ignore.case = TRUE),])
+        sprep<-t(yack@morespikes[spnames,])
+      }
+    }
+    return(sprep)
+  })
+  
+  # Check for quality
+  quality<- reactive({
+    quality<-NULL
+    if(is.null(quality)) try(quality <- qc(rawData()),TRUE)
+    return(quality)
+  })
+  
+  # Notify user that prerequisites have been loaded
+  output$CDFnotify <- renderPrint({
+    req(rawData())
+    
+    print("Standard CDF is now loaded")
+    
+    if(is.null(lys())){
+      print("Values based on the detection.p.val function cannot be computed for this chip type")
+    }
+    if(is.null(sprep())){
+      print("Values based on the yaqc function cannot be computed for this chip type")
+    }
+    if(is.null(quality())) {
+      print("Plots based on the simpleaffy qc function cannot be created for this chip type")
+    }
+  })
+  
+  ##### Sample quality #####
+  # Inputs for sample quality plots
+  output$sqInputs <- renderUI({
     tagList(
-        
-      # Sample Prep Plot
-      output$sampleprep<-renderImage({
-        req(input$sampleprep)
-        
-        sprep=NULL
-        lys=NULL
-        
-        if(is.null(lys)) {
-          try({calls<-detection.p.val(rawData())$call
-          lys<-calls[rownames(calls)[grep("lys.*3",rownames(calls), ignore.case = TRUE)],]
-          rm(calls)},TRUE)
-          if(is.null(lys)) {
-            warning("Plots based on the detection.p.val function cannot be created for this chip type")
-          }else{
-            if(length(lys) > length(sampleNames(rawData()))) { lys<-lys[1,] }
-          }
-        }
-        
-        if(!is.null(lys) && is.null(sprep)) {
-          try(yack <- yaqc(rawData()),TRUE) 
-          if(exists("yack")) {
-            spnames<-rownames(yack@morespikes[grep("(lys|phe|thr|dap).*3", # only 3' !
-                                                   rownames(yack@morespikes), ignore.case = TRUE),])
-            sprep<-t(yack@morespikes[spnames,])
-          }else {
-            warning("Values based on the yaqc function cannot be computed for this chip type")
-          }
-        }
-        
-        if(!is.null(sprep) && !is.null(lys)) {
-          #par(parStart)
-          lmin<-min(sprep)
-          lmax<-max(sprep)+50
-          
-          # create the plot           
-          RawDataSamplePrepControl<- tempfile(fileext='.png')
-          
-          png(file = RawDataSamplePrepControl, width=WIDTH, height=HEIGHT, pointsize=POINTSIZE)
-          if(length(sampleNames(rawData())) < MAXARRAY){    
-            par(mfrow=c(1,1),oma=c(13,0,0,0))
-          }else{
-            par(mfrow=c(1,1),oma=c(0.1,0,0,0))
-          }    
-          plot(c(lmin,lmax), type = 'n', ann = FALSE, axes = FALSE, 
-               frame.plot = TRUE, ylim = c(lmin, lmax), xlim = c(1,5))
-          
-          dummy<-apply(cbind(sprep,plotColors(),1:length(sampleNames(rawData()))),1,
-                       function(x) {
-                         par(new=TRUE);
-                         plot(as.numeric(x[1:(length(x)-2)]),
-                              type = 'b', ann=FALSE, axes=FALSE, pch='.', cex=4, lwd=2, 
-                              col=x[length(x)-1], lty = as.numeric(x[length(x)]),
-                              ylim=c(lmin,lmax), xlim=c(1,5))})
-          
-          title(main="Spike-in Sample Prep controls intensities and calls",
-                ylab="Intensity",cex.lab=0.8)
-          
-          label3<-""
-          title1<-"Intensity: OK (Lys < Phe < Thr < Dap for all arrays)"
-          title2<-"\nLys Present calls: OK (all Lys are called present)"
-          
-          # test for Lys < Phe < Thr < Dap
-          bad1 <-  colnames(t(sprep))[!(sprep[,1]<sprep[,2] 
-                                        & sprep[,2]<sprep[,3] 
-                                        & sprep[,3]<sprep[,4])]
-          if(length(bad1)>0){    
-            title1<-paste("Intensity: not OK (some array",ifelse(length(bad1)>1,"s",""),
-                          " do",ifelse(length(bad1)>1,"","es")," not follow the rule Lys < Phe < Thr < Dap;",
-                          "\nmaybe no Sample Prep controls were spiked on these arrays.)",sep="")
-          }
-          
-          # test for Lys presence
-          bad2 <- names(lys[lys != 'P'])
-          bad2 <- gsub(".present","",bad2)
-          if(length(bad2)>0){
-            title2<-paste("Lys Present calls: ",length(bad2),
-                          " Lys not called present",sep="")
-          }
-          if(length(lys[lys=='P'])==0){
-            label3 <- 
-              "\nApparently no Sample Prep controls were spiked on these arrays."
-          } 
-          
-          title(xlab = c(title1,title2), cex.lab = 0.8)
-          legend("topleft", paste("Lys present calls = ", 
-                                  length(lys[lys == "P"]),"/", length(lys),label3), bty = "n", cex=0.7)
-          if(length(sampleNames(rawData())) < (MAXARRAY+20)){
-            cexval <- 0.65
-          }else{
-            cexval <- 0.45
-          }         
-          legend("topright", substr(sampleNames(rawData()),1,20), lwd=2,    
-                 col = plotColors(), cex =cexval, bty = "n", lt = 1:length(sampleNames(rawData())))
-          par(cex.axis = 0.8)
-          axis(2)
-          axis(1, at=1:4, labels = c("Lys", "Phe", "Thr", "Dap"))
-          
-          if(length(bad2)>0){
-            text(c(rep(0.87,length(lys[lys!='P']))),sprep[lys!='P',1],
-                 lys[lys!='P'], pos=4,offset=0.2, cex=0.7, col="red")
-          }
-          dev.off()
-          
-          list(src = RawDataSamplePrepControl,width = WIDTH,height = HEIGHT,alt = "This is alternate text")
-        } else {
-          warning("Spike-in sample prep plot is cannot be computed for this chip type")
-        }
-      },outputArgs = list(width = "100%", height = "auto"),deleteFile = T),
+      if(!is.null(sprep()) && !is.null(lys())) {
+        checkboxInput(inputId = "sampleprep",label =  "Sample prep controls",value = T)
+      },
+      if(!is.null(quality())) {
+        checkboxInput(inputId = "ratioplot",label = "3'/5' ratio",value = T)
+      },
+      checkboxInput(inputId = "rnadegplot",label = "RNA degradation",value = T)
+    )
+  })
+
+  # Sample prep plot
+  output$sampleprep<-renderImage({
+    req(input$sampleprep)
+    lys <- lys()
+    sprep <- sprep()
+    
+    #par(parStart)
+    lmin<-min(sprep)
+    lmax<-max(sprep)+50
+    
+    # create the plot           
+    RawDataSamplePrepControl<- tempfile(fileext='.png')
+    
+    png(file = RawDataSamplePrepControl, width=WIDTH, height=HEIGHT, pointsize=POINTSIZE)
+    if(length(sampleNames(rawData())) < MAXARRAY){    
+      par(mfrow=c(1,1),oma=c(13,0,0,0))
+    }else{
+      par(mfrow=c(1,1),oma=c(0.1,0,0,0))
+    }    
+    plot(c(lmin,lmax), type = 'n', ann = FALSE, axes = FALSE, 
+         frame.plot = TRUE, ylim = c(lmin, lmax), xlim = c(1,5))
+    
+    dummy<-apply(cbind(sprep,plotColors(),1:length(sampleNames(rawData()))),1,
+                 function(x) {
+                   par(new=TRUE);
+                   plot(as.numeric(x[1:(length(x)-2)]),
+                        type = 'b', ann=FALSE, axes=FALSE, pch='.', cex=4, lwd=2, 
+                        col=x[length(x)-1], lty = as.numeric(x[length(x)]),
+                        ylim=c(lmin,lmax), xlim=c(1,5))})
+    
+    title(main="Spike-in Sample Prep controls intensities and calls",
+          ylab="Intensity",cex.lab=0.8)
+    
+    label3<-""
+    title1<-"Intensity: OK (Lys < Phe < Thr < Dap for all arrays)"
+    title2<-"\nLys Present calls: OK (all Lys are called present)"
+    
+    # test for Lys < Phe < Thr < Dap
+    bad1 <-  colnames(t(sprep))[!(sprep[,1]<sprep[,2] 
+                                  & sprep[,2]<sprep[,3] 
+                                  & sprep[,3]<sprep[,4])]
+    if(length(bad1)>0){    
+      title1<-paste("Intensity: not OK (some array",ifelse(length(bad1)>1,"s",""),
+                    " do",ifelse(length(bad1)>1,"","es")," not follow the rule Lys < Phe < Thr < Dap;",
+                    "\nmaybe no Sample Prep controls were spiked on these arrays.)",sep="")
+    }
+    
+    # test for Lys presence
+    bad2 <- names(lys[lys != 'P'])
+    bad2 <- gsub(".present","",bad2)
+    if(length(bad2)>0){
+      title2<-paste("Lys Present calls: ",length(bad2),
+                    " Lys not called present",sep="")
+    }
+    if(length(lys[lys=='P'])==0){
+      label3 <- 
+        "\nApparently no Sample Prep controls were spiked on these arrays."
+    } 
+    
+    title(xlab = c(title1,title2), cex.lab = 0.8)
+    legend("topleft", paste("Lys present calls = ", 
+                            length(lys[lys == "P"]),"/", length(lys),label3), bty = "n", cex=0.7)
+    if(length(sampleNames(rawData())) < (MAXARRAY+20)){
+      cexval <- 0.65
+    }else{
+      cexval <- 0.45
+    }         
+    legend("topright", substr(sampleNames(rawData()),1,20), lwd=2,    
+           col = plotColors(), cex =cexval, bty = "n", lt = 1:length(sampleNames(rawData())))
+    par(cex.axis = 0.8)
+    axis(2)
+    axis(1, at=1:4, labels = c("Lys", "Phe", "Thr", "Dap"))
+    
+    if(length(bad2)>0){
+      text(c(rep(0.87,length(lys[lys!='P']))),sprep[lys!='P',1],
+           lys[lys!='P'], pos=4,offset=0.2, cex=0.7, col="red")
+    }
+    dev.off()
+    
+    list(src = RawDataSamplePrepControl,width = WIDTH,height = HEIGHT,alt = "This is alternate text")
+  })
+    
+  # 3'5' Ratio plot beta actin
+  output$ratioplot<-renderImage({
+    req(input$ratioplot)
+    Data <- rawData()
+    experimentFactor <- experimentFactor()
+    plotColors <- plotColors()
+    legendColors <- legendColors()
+    quality<- quality()
+    #par(parStart)
+    
+    plotFun <- function(i,j,cutoff,Cname){
+      ratio35 <- quality@qc.probes[,i]/quality@qc.probes[,j]
+      ratioM <- quality@qc.probes[,i]/quality@qc.probes[,i+1]
       
-      # 3'5' Ratio plot beta actin
-      output$ratioplot<-renderImage({
-        req(input$ratioplot)
-        Data <- rawData()
-        experimentFactor=experimentFactor()
-        plotColors=plotColors()
-        legendColors=legendColors()
-        quality=NULL
-        
-        if(is.null(experimentFactor)) stop("the 'experimentFactor' parameter is required")
-        if(is.null(plotColors)) stop("the 'plotColors' parameter is required")
-        if(is.null(legendColors)) stop("the 'legendColors' parameter is required")
-        if(is.null(quality)) try(quality <- qc(Data),TRUE)
-        
-        if(!is.null(quality)) {  
-          #par(parStart)
-          
-          plotFun <- function(i,j,cutoff,Cname){
-            ratio35 <- quality@qc.probes[,i]/quality@qc.probes[,j]
-            ratioM <- quality@qc.probes[,i]/quality@qc.probes[,i+1]
-            
-            cMin <- 0
-            cMax <- max(max(cbind(ratio35, ratioM)) + 2, 5)
-            if(Cname=="beta-actin"){
-              symbol=c(17,2) # triangles for beta-actin
-            }else{
-              symbol=c(19,1) # circles for GAPDH (as in the simpleaffy QC report)
-            }
-            
-            par(mfrow=c(1,2),oma=c(17,0.5,0,0.5),cex.axis=0.8)
-            plot(ratio35, type='n', ann=FALSE, axes=FALSE, 
-                 frame.plot=TRUE, pch='.', cex=10,  ylim=c(cMin,cMax))
-            rect(0, 0, length(ratio35)+1, cutoff, col=gray(0.9), border=FALSE)
-            
-            for (k in 0:cMax){
-              abline(h=k,lty=2,col=gray(0.8))
-            }
-            
-            par(new=TRUE)
-            plot(ratio35, type='h', ann=FALSE, axes=FALSE, 
-                 frame.plot=TRUE, lwd=3, col=plotColors, ylim=c(cMin,cMax))
-            par(new=TRUE)
-            plot(ratio35,type='p', ann=FALSE, axes=FALSE, 
-                 frame.plot=TRUE, pch=symbol[1], col=plotColors, ylim=c(cMin,cMax))
-            par(new=TRUE)
-            plot(ratioM,type='p', ann=FALSE, axes=FALSE, 
-                 frame.plot=TRUE, pch=symbol[2], col="black", ylim=c(cMin,cMax))           
-            
-            title(main= paste("RNA degradation of", Cname),ylab="3'/5' and 3'/M ratios")    
-            axis(2)
-            par(cex.axis=0.65)
-            if(length(sampleNames(Data))<(MAXARRAY/2)){ # array names not reported if more than 20 arrays
-              axis(1,at=1:length(ratio35),las=2,labels=sampleNames(Data))
-            }
-            if(length(levels(experimentFactor))>1){
-              legend("topright", levels(experimentFactor),
-                     col = legendColors, fill = legendColors, bty = "n",cex = 0.55)
-            }
-            legend("topleft", c(paste("3\'/5\' ratio (max=", round(max(ratio35),2),")",
-                                      sep=""), paste("3'/M ratio (max=", round(max(ratioM),2),")",sep="")),
-                   col = c(gray(0.3),"black"),pch=symbol, cex=0.55, bty = "o")
-            t1 <- ratio35 <= cutoff	
-            if(length(t1[t1==FALSE])>0 && length(sampleNames(Data))>=(MAXARRAY/2)){
-              if(length(t1[t1==FALSE])<25){
-                textlab<-sampleNames(Data)[t1==FALSE]
-                legend("topleft", c(rep("",4),"Outliers, from left to right",textlab), 
-                       text.col = c(rep(1,5), rep("red",length(textlab))), bty = "n",cex=0.38)  
-              }else{
-                mtext("Too many arrays and outliers; \nsee details on the QC table",side=1,cex=0.8,line=3)
-              }
-            }
-            mtext(paste("Ratios should stand within the grey rectangle [0,",cutoff,"]"), 
-                  side=4, font=1, cex=0.7)
-            
-            par(cex.axis=0.8)
-            boxplot(cbind(ratio35, ratioM), axes=FALSE, frame.plot=TRUE)
-            title(main=paste("Boxplot of", Cname,"ratios"))    
-            par(cex.lab=0.8)
-            if(max(ratio35 ) < cutoff){
-              title(xlab=paste(Cname," QC: OK (all 3'/5' ratios < ",cutoff,")",sep=""))
-            }  else{
-              title(xlab=paste(Cname," QC: not OK (some 3'/5' ratios >",cutoff,
-                               ")\nNote that the threshold of ",cutoff,
-                               " \nwas determined for Homo Sapiens.",sep=""), line=4)
-            }       
-            
-            axis(1,at=1:2,labels=c("3'/5' ratio","3'/M ratio"))
-            axis(2)
-          }
-          
-          # Graph creation: beta-actin
-          RawData53ratioPlot_betaActin<-tempfile(fileext = '.png')
-          png(file = RawData53ratioPlot_betaActin,width=WIDTH,height=HEIGHT, pointsize=POINTSIZE)
-          plotFun(1,3,3,"beta-actin")
-          dev.off()
-          
-          list(src = RawData53ratioPlot_betaActin,
-               width = WIDTH,
-               height = HEIGHT,
-               alt = "This is alternate text")
-        } else {
-          warning("3'/5' ratio plot is not computed for this chip type")
-        } 
-      },outputArgs = list(width = "100%", height = "auto"),deleteFile = T),
+      cMin <- 0
+      cMax <- max(max(cbind(ratio35, ratioM)) + 2, 5)
+      if(Cname=="beta-actin"){
+        symbol=c(17,2) # triangles for beta-actin
+      }else{
+        symbol=c(19,1) # circles for GAPDH (as in the simpleaffy QC report)
+      }
       
-      # 3'5' Ratio plot GADPH
-      output$ratioplot2<-renderImage({
-        req(input$ratioplot)
-        Data <- rawData()
-        experimentFactor=experimentFactor()
-        plotColors=plotSymbols()
-        legendColors=legendColors()
-        quality=NULL
-        
-        if(is.null(experimentFactor)) stop("the 'experimentFactor' parameter is required")
-        if(is.null(plotColors)) stop("the 'plotColors' parameter is required")
-        if(is.null(legendColors)) stop("the 'legendColors' parameter is required")
-        if(is.null(quality)) try(quality <- qc(Data),TRUE)
-        
-        if(!is.null(quality)) {  
-          #par(parStart)
-          
-          plotFun <- function(i,j,cutoff,Cname){
-            ratio35 <- quality@qc.probes[,i]/quality@qc.probes[,j]
-            ratioM <- quality@qc.probes[,i]/quality@qc.probes[,i+1]
-            
-            cMin <- 0
-            cMax <- max(max(cbind(ratio35, ratioM)) + 2, 5)
-            if(Cname=="beta-actin"){
-              symbol=c(17,2) # triangles for beta-actin
-            }else{
-              symbol=c(19,1) # circles for GAPDH (as in the simpleaffy QC report)
-            }
-            
-            par(mfrow=c(1,2),oma=c(17,0.5,0,0.5),cex.axis=0.8)
-            plot(ratio35, type='n', ann=FALSE, axes=FALSE, 
-                 frame.plot=TRUE, pch='.', cex=10,  ylim=c(cMin,cMax))
-            rect(0, 0, length(ratio35)+1, cutoff, col=gray(0.9), border=FALSE)
-            
-            for (k in 0:cMax){
-              abline(h=k,lty=2,col=gray(0.8))
-            }
-            
-            par(new=TRUE)
-            plot(ratio35, type='h', ann=FALSE, axes=FALSE, 
-                 frame.plot=TRUE, lwd=3, col=plotColors, ylim=c(cMin,cMax))
-            par(new=TRUE)
-            plot(ratio35,type='p', ann=FALSE, axes=FALSE, 
-                 frame.plot=TRUE, pch=symbol[1], col=plotColors, ylim=c(cMin,cMax))
-            par(new=TRUE)
-            plot(ratioM,type='p', ann=FALSE, axes=FALSE, 
-                 frame.plot=TRUE, pch=symbol[2], col="black", ylim=c(cMin,cMax))           
-            
-            title(main= paste("RNA degradation of", Cname),ylab="3'/5' and 3'/M ratios")    
-            axis(2)
-            par(cex.axis=0.65)
-            if(length(sampleNames(Data))<(MAXARRAY/2)){ # array names not reported if more than 20 arrays
-              axis(1,at=1:length(ratio35),las=2,labels=sampleNames(Data))
-            }
-            if(length(levels(experimentFactor))>1){
-              legend("topright", levels(experimentFactor),
-                     col = legendColors, fill = legendColors, bty = "n",cex = 0.55)
-            }
-            legend("topleft", c(paste("3\'/5\' ratio (max=", round(max(ratio35),2),")",
-                                      sep=""), paste("3'/M ratio (max=", round(max(ratioM),2),")",sep="")),
-                   col = c(gray(0.3),"black"),pch=symbol, cex=0.55, bty = "o")
-            t1 <- ratio35 <= cutoff	
-            if(length(t1[t1==FALSE])>0 && length(sampleNames(Data))>=(MAXARRAY/2)){
-              if(length(t1[t1==FALSE])<25){
-                textlab<-sampleNames(Data)[t1==FALSE]
-                legend("topleft", c(rep("",4),"Outliers, from left to right",textlab), 
-                       text.col = c(rep(1,5), rep("red",length(textlab))), bty = "n",cex=0.38)  
-              }else{
-                mtext("Too many arrays and outliers; \nsee details on the QC table",side=1,cex=0.8,line=3)
-              }
-            }
-            mtext(paste("Ratios should stand within the grey rectangle [0,",cutoff,"]"), 
-                  side=4, font=1, cex=0.7)
-            
-            par(cex.axis=0.8)
-            boxplot(cbind(ratio35, ratioM), axes=FALSE, frame.plot=TRUE)
-            title(main=paste("Boxplot of", Cname,"ratios"))    
-            par(cex.lab=0.8)
-            if(max(ratio35 ) < cutoff){
-              title(xlab=paste(Cname," QC: OK (all 3'/5' ratios < ",cutoff,")",sep=""))
-            }  else{
-              title(xlab=paste(Cname," QC: not OK (some 3'/5' ratios >",cutoff,
-                               ")\nNote that the threshold of ",cutoff,
-                               " \nwas determined for Homo Sapiens.",sep=""), line=4)
-            }       
-            
-            axis(1,at=1:2,labels=c("3'/5' ratio","3'/M ratio"))
-            axis(2)
-          }
-          
-          # Graph creation: two separated graphs
-          RawData53ratioPlot_GADPH<-tempfile(fileext = '.png')
-          png(file = RawData53ratioPlot_GADPH,width=WIDTH,height=HEIGHT, pointsize=POINTSIZE)  
-          plotFun(4,6,1.25,"GAPDH")
-          dev.off()  
-          list(src = RawData53ratioPlot_GADPH,
-               width = WIDTH,
-               height = HEIGHT,
-               alt = "This is alternate text")
-          
-        } else {
-          warning("3'/5' ratio plot is not computed for this chip type")
-        } 
-      },outputArgs = list(width = "100%", height = "auto"),deleteFile = T),
+      par(mfrow=c(1,2),oma=c(17,0.5,0,0.5),cex.axis=0.8)
+      plot(ratio35, type='n', ann=FALSE, axes=FALSE, 
+           frame.plot=TRUE, pch='.', cex=10,  ylim=c(cMin,cMax))
+      rect(0, 0, length(ratio35)+1, cutoff, col=gray(0.9), border=FALSE)
       
-      # RNA degradation plot
-      output$rnadegplot<- renderImage({
-        req(input$rnadegplot)
-        Data <- rawData()
-        Data.rnadeg=NULL
-        
-        RawDataRNAdegradation <- tempfile(fileext='.png')
-        
-        if(is.null(plotColors())) stop("the 'plotColors' parameter is required") 
-        if(is.null(Data.rnadeg)) Data.rnadeg <- AffyRNAdeg(rawData())
-        
-        png(file = RawDataRNAdegradation, width=WIDTH, height=HEIGHT, pointsize=POINTSIZE)
-        
-        if(length(sampleNames(rawData()))<MAXARRAY){
-          cexval <- 0.65
-          par(lwd = 2, oma=c(13,0,0,0))	
-        } else{
-          cexval <- 0.45 
-          par(lwd = 2, oma=c(0.1,0,0,0))	
-        }    
-        par(mar=c(4,4,4,0), cex.axis=0.6, cex.lab=0.75)
-        layout(matrix(c(1,2),1,2,byrow=TRUE), c(2,1), 1, FALSE)
-        plotAffyRNAdeg(Data.rnadeg, col = plotColors(), lty = 1:length(sampleNames(rawData()))) 
-        par(mar=c(4,0,4,0), cex.axis=0.01, cex.lab=0.01)
-        plot(1,type = 'n', ann=FALSE, axes=FALSE, frame.plot=FALSE)
-        legend("topleft",sampleNames(rawData()), lwd=2, col = plotColors(), cex = cexval, bty = "n", lty = 1)
-        dev.off() 
-        
-        # Return a list containing the file attributes
-        list(src = RawDataRNAdegradation,
-             #  width = WIDTH,
-             #   height = HEIGHT,
-             alt = "This is alternate text")
-      },outputArgs = list(width = "100%", height = "auto"), deleteFile = T)
+      for (k in 0:cMax){
+        abline(h=k,lty=2,col=gray(0.8))
+      }
+      
+      par(new=TRUE)
+      plot(ratio35, type='h', ann=FALSE, axes=FALSE, 
+           frame.plot=TRUE, lwd=3, col=plotColors, ylim=c(cMin,cMax))
+      par(new=TRUE)
+      plot(ratio35,type='p', ann=FALSE, axes=FALSE, 
+           frame.plot=TRUE, pch=symbol[1], col=plotColors, ylim=c(cMin,cMax))
+      par(new=TRUE)
+      plot(ratioM,type='p', ann=FALSE, axes=FALSE, 
+           frame.plot=TRUE, pch=symbol[2], col="black", ylim=c(cMin,cMax))           
+      
+      title(main= paste("RNA degradation of", Cname),ylab="3'/5' and 3'/M ratios")    
+      axis(2)
+      par(cex.axis=0.65)
+      if(length(sampleNames(Data))<(MAXARRAY/2)){ # array names not reported if more than 20 arrays
+        axis(1,at=1:length(ratio35),las=2,labels=sampleNames(Data))
+      }
+      if(length(levels(experimentFactor))>1){
+        legend("topright", levels(experimentFactor),
+               col = legendColors, fill = legendColors, bty = "n",cex = 0.55)
+      }
+      legend("topleft", c(paste("3\'/5\' ratio (max=", round(max(ratio35),2),")",
+                                sep=""), paste("3'/M ratio (max=", round(max(ratioM),2),")",sep="")),
+             col = c(gray(0.3),"black"),pch=symbol, cex=0.55, bty = "o")
+      t1 <- ratio35 <= cutoff	
+      if(length(t1[t1==FALSE])>0 && length(sampleNames(Data))>=(MAXARRAY/2)){
+        if(length(t1[t1==FALSE])<25){
+          textlab<-sampleNames(Data)[t1==FALSE]
+          legend("topleft", c(rep("",4),"Outliers, from left to right",textlab), 
+                 text.col = c(rep(1,5), rep("red",length(textlab))), bty = "n",cex=0.38)  
+        }else{
+          mtext("Too many arrays and outliers; \nsee details on the QC table",side=1,cex=0.8,line=3)
+        }
+      }
+      mtext(paste("Ratios should stand within the grey rectangle [0,",cutoff,"]"), 
+            side=4, font=1, cex=0.7)
+      
+      par(cex.axis=0.8)
+      boxplot(cbind(ratio35, ratioM), axes=FALSE, frame.plot=TRUE)
+      title(main=paste("Boxplot of", Cname,"ratios"))    
+      par(cex.lab=0.8)
+      if(max(ratio35 ) < cutoff){
+        title(xlab=paste(Cname," QC: OK (all 3'/5' ratios < ",cutoff,")",sep=""))
+      }  else{
+        title(xlab=paste(Cname," QC: not OK (some 3'/5' ratios >",cutoff,
+                         ")\nNote that the threshold of ",cutoff,
+                         " \nwas determined for Homo Sapiens.",sep=""), line=4)
+      }       
+      
+      axis(1,at=1:2,labels=c("3'/5' ratio","3'/M ratio"))
+      axis(2)
+    }
+    
+    # Graph creation: beta-actin
+    RawData53ratioPlot_betaActin<-tempfile(fileext = '.png')
+    png(file = RawData53ratioPlot_betaActin,width=WIDTH,height=HEIGHT, pointsize=POINTSIZE)
+    plotFun(1,3,3,"beta-actin")
+    dev.off()
+    
+    list(src = RawData53ratioPlot_betaActin,width = WIDTH,height = HEIGHT,alt = "This is alternate text")
+  })
+  
+  # 3'5' Ratio plot GADPH
+  output$ratioplot2<-renderImage({
+    req(input$ratioplot)
+    experimentFactor<-experimentFactor()
+    legendColors<-legendColors()
+    quality<-quality()
+    #par(parStart)
+    
+    plotFun <- function(i,j,cutoff,Cname){
+      ratio35 <- quality@qc.probes[,i]/quality@qc.probes[,j]
+      ratioM <- quality@qc.probes[,i]/quality@qc.probes[,i+1]
+      
+      cMin <- 0
+      cMax <- max(max(cbind(ratio35, ratioM)) + 2, 5)
+      if(Cname=="beta-actin"){
+        symbol=c(17,2) # triangles for beta-actin
+      }else{
+        symbol=c(19,1) # circles for GAPDH (as in the simpleaffy QC report)
+      }
+      
+      par(mfrow=c(1,2),oma=c(17,0.5,0,0.5),cex.axis=0.8)
+      plot(ratio35, type='n', ann=FALSE, axes=FALSE, 
+           frame.plot=TRUE, pch='.', cex=10,  ylim=c(cMin,cMax))
+      rect(0, 0, length(ratio35)+1, cutoff, col=gray(0.9), border=FALSE)
+      
+      for (k in 0:cMax){
+        abline(h=k,lty=2,col=gray(0.8))
+      }
+      
+      par(new=TRUE)
+      plot(ratio35, type='h', ann=FALSE, axes=FALSE, 
+           frame.plot=TRUE, lwd=3, col=plotColors, ylim=c(cMin,cMax))
+      par(new=TRUE)
+      plot(ratio35,type='p', ann=FALSE, axes=FALSE, 
+           frame.plot=TRUE, pch=symbol[1], col=plotColors, ylim=c(cMin,cMax))
+      par(new=TRUE)
+      plot(ratioM,type='p', ann=FALSE, axes=FALSE, 
+           frame.plot=TRUE, pch=symbol[2], col="black", ylim=c(cMin,cMax))           
+      
+      title(main= paste("RNA degradation of", Cname),ylab="3'/5' and 3'/M ratios")    
+      axis(2)
+      par(cex.axis=0.65)
+      if(length(sampleNames(Data))<(MAXARRAY/2)){ # array names not reported if more than 20 arrays
+        axis(1,at=1:length(ratio35),las=2,labels=sampleNames(Data))
+      }
+      if(length(levels(experimentFactor))>1){
+        legend("topright", levels(experimentFactor),
+               col = legendColors, fill = legendColors, bty = "n",cex = 0.55)
+      }
+      legend("topleft", c(paste("3\'/5\' ratio (max=", round(max(ratio35),2),")",
+                                sep=""), paste("3'/M ratio (max=", round(max(ratioM),2),")",sep="")),
+             col = c(gray(0.3),"black"),pch=symbol, cex=0.55, bty = "o")
+      t1 <- ratio35 <= cutoff	
+      if(length(t1[t1==FALSE])>0 && length(sampleNames(Data))>=(MAXARRAY/2)){
+        if(length(t1[t1==FALSE])<25){
+          textlab<-sampleNames(Data)[t1==FALSE]
+          legend("topleft", c(rep("",4),"Outliers, from left to right",textlab), 
+                 text.col = c(rep(1,5), rep("red",length(textlab))), bty = "n",cex=0.38)  
+        }else{
+          mtext("Too many arrays and outliers; \nsee details on the QC table",side=1,cex=0.8,line=3)
+        }
+      }
+      mtext(paste("Ratios should stand within the grey rectangle [0,",cutoff,"]"), 
+            side=4, font=1, cex=0.7)
+      
+      par(cex.axis=0.8)
+      boxplot(cbind(ratio35, ratioM), axes=FALSE, frame.plot=TRUE)
+      title(main=paste("Boxplot of", Cname,"ratios"))    
+      par(cex.lab=0.8)
+      if(max(ratio35 ) < cutoff){
+        title(xlab=paste(Cname," QC: OK (all 3'/5' ratios < ",cutoff,")",sep=""))
+      }  else{
+        title(xlab=paste(Cname," QC: not OK (some 3'/5' ratios >",cutoff,
+                         ")\nNote that the threshold of ",cutoff,
+                         " \nwas determined for Homo Sapiens.",sep=""), line=4)
+      }       
+      
+      axis(1,at=1:2,labels=c("3'/5' ratio","3'/M ratio"))
+      axis(2)
+    }
+    
+    # Graph creation: two separated graphs
+    RawData53ratioPlot_GADPH<-tempfile(fileext = '.png')
+    png(file = RawData53ratioPlot_GADPH,width=WIDTH,height=HEIGHT, pointsize=POINTSIZE)  
+    plotFun(4,6,1.25,"GAPDH")
+    dev.off()  
+    list(src = RawData53ratioPlot_GADPH,width = WIDTH,height = HEIGHT,alt = "This is alternate text")
+  })
+  
+  # RNA degradation plot
+  output$rnadegplot<- renderImage({
+    req(input$rnadegplot)
+    Data <- rawData()
+    Data.rnadeg=NULL
+    
+    RawDataRNAdegradation <- tempfile(fileext='.png')
+    
+    if(is.null(plotColors())) stop("the 'plotColors' parameter is required") 
+    if(is.null(Data.rnadeg)) Data.rnadeg <- AffyRNAdeg(rawData())
+    
+    png(file = RawDataRNAdegradation, width=WIDTH, height=HEIGHT, pointsize=POINTSIZE)
+    
+    if(length(sampleNames(rawData()))<MAXARRAY){
+      cexval <- 0.65
+      par(lwd = 2, oma=c(13,0,0,0))	
+    } else{
+      cexval <- 0.45 
+      par(lwd = 2, oma=c(0.1,0,0,0))	
+    }    
+    par(mar=c(4,4,4,0), cex.axis=0.6, cex.lab=0.75)
+    layout(matrix(c(1,2),1,2,byrow=TRUE), c(2,1), 1, FALSE)
+    plotAffyRNAdeg(Data.rnadeg, col = plotColors(), lty = 1:length(sampleNames(rawData()))) 
+    par(mar=c(4,0,4,0), cex.axis=0.01, cex.lab=0.01)
+    plot(1,type = 'n', ann=FALSE, axes=FALSE, frame.plot=FALSE)
+    legend("topleft",sampleNames(rawData()), lwd=2, col = plotColors(), cex = cexval, bty = "n", lty = 1)
+    dev.off() 
+    
+    # Return a list containing the file attributes
+    list(src = RawDataRNAdegradation,
+         #  width = WIDTH,
+         #   height = HEIGHT,
+         alt = "This is alternate text")
+  })
+ 
+   
+  ##### Hybridization and signal quality #####
+  # Inputs for hybridization and signal quality
+  output$hybridInput <- renderUI({
+    tagList(
+      if(!is.null(quality())) {
+        checkboxInput(inputId = "hybrid",label = "Spike-In controls",value = T)
+        checkboxInput(inputId = "percentpresent",label = "Percent present",value = T)
+        checkboxInput(inputId = "backgroundintensity",label = "Background intensity",value = T)
+      },
+      checkboxInput(inputId = "posnegdistro",label = "Positive/Negative controls",value = T)
     )
   })
   
   # Spike in hybridization
   output$hybrid<-renderImage({
     req(input$hybrid)
-    Data<-rawData()
-    quality=NULL
-    plotColors<-plotColors()
+    RawDataSpikeinHybridControl<- tempfile(fileext='.png')
     
-    if(is.null(plotColors)) stop("the 'plotColors' parameter is required")
-    if(is.null(quality)) try(quality <- qc(Data),TRUE)
-    
-    if(!is.null(quality)) {
-      
-      RawDataSpikeinHybridControl<- tempfile(fileext='.png')
-      
-      png(file = RawDataSpikeinHybridControl,width=WIDTH,height=HEIGHT, pointsize=POINTSIZE)
-      if(length(sampleNames(Data)) < MAXARRAY){    
-        par(mfrow=c(1,1),oma=c(13,0,0,0))
-      }else{
-        par(mfrow=c(1,1),oma=c(0.1,0,0,0))
-      }
-      plot(c(min(quality@spikes),max(quality@spikes)),
-           type = 'n', ann = FALSE, axes = FALSE, frame.plot = TRUE,
-           ylim = c(min(quality@spikes), max(quality@spikes)),
-           xlim = c(1,5))
-      
-      dummy<-apply(cbind(quality@spikes,plotColors,1:length(sampleNames(Data))),1,
-                   function(x) {
-                     par(new=TRUE);
-                     plot(as.numeric(x[1:(length(x)-2)]),
-                          type = 'b', ann=FALSE, axes=FALSE, pch='.', cex=4, lwd=2, 
-                          col=x[length(x)-1], lty = as.numeric(x[length(x)]),
-                          ylim=c(min(quality@spikes),max(quality@spikes)), xlim = c(1,5))})
-      
-      title(main = "Spike-in Hybridization controls intensities and calls",
-            ylab="Intensity",cex.lab=0.8) 
-      label3<-""
-      title1<-"Intensities: OK (bioB < bioC < bioD < creX for all arrays)"
-      title2<-"BioB Present calls: OK (indeed all bioB are called present)"
-      
-      # test for bioB<bioC<bioD<creX
-      bad1 <- colnames(t(quality@spikes))[!(quality@spikes[,1]<quality@spikes[,2] 
-                                            & quality@spikes[,2]<quality@spikes[,3] 
-                                            & quality@spikes[,3]<quality@spikes[,4])]
-      if(length(bad1)>0){    
-        title1<-paste("Intensity: not OK (some array",ifelse(length(bad1)>1,"s",""),
-                      " do",ifelse(length(bad1)>1,"","es")," not follow the rule bioB < bioC < bioD < creX)",sep="")
-      }
-      
-      # test for bioB presence
-      bad2<-gsub(".present","",names(quality@bioBCalls[quality@bioBCalls != 'P']))
-      if(length(bad2)>0){
-        title2<-paste("BioB present calls: not OK (",length(bad2),"/",
-                      length(quality@bioBCalls)," bioB not called present)")
-      }
-      if(length(quality@bioBCalls[quality@bioBCalls =='P'])==0){
-        label3 <- 
-          "\nApparently no Hybridization controls were spiked on these arrays."
-      }
-      
-      title(xlab = c(title1,title2), cex.lab = 0.8)
-      legend("topleft", paste("bioB present calls = ", 
-                              length(quality@bioBCalls[quality@bioBCalls == "P"]),"/",
-                              length(quality@bioBCalls),label3), bty = "n", cex=0.7)
-      
-      if(length(sampleNames(Data)) < (MAXARRAY+20)){
-        cexval <- 0.65
-      }else{
-        cexval <- 0.45
-      }              
-      
-      legend("bottomright", substr(sampleNames(Data),1,20), lwd=2,
-             col = plotColors, cex = cexval, bty = "n", lt = 1:length(sampleNames(Data)))
-      par(cex.axis = 0.8) 
-      axis(2)
-      axis(1, at=1:4, labels = names(colnames(quality@spikes)))
-      
-      if(length(bad2)>0){
-        text(c(rep(0.89,length(quality@bioBCalls[quality@bioBCalls!='P']))),
-             quality@spikes[quality@bioBCalls!='P',1], 
-             quality@bioBCalls[quality@bioBCalls!='P'], pos=4,offset=0.2, 
-             cex=0.8, col="red")
-      }  
-      dev.off()
-      
-      list(src = RawDataSpikeinHybridControl,
-           width = WIDTH,
-           height = HEIGHT,
-           alt = "This is alternate text")
-    } else {
-      warning("Spike-in hybridization plot is not computed for this chip type")
+    png(file = RawDataSpikeinHybridControl,width=WIDTH,height=HEIGHT, pointsize=POINTSIZE)
+    if(length(sampleNames(rawData())) < MAXARRAY){    
+      par(mfrow=c(1,1),oma=c(13,0,0,0))
+    }else{
+      par(mfrow=c(1,1),oma=c(0.1,0,0,0))
     }
-  },deleteFile = T)
+    plot(c(min(quality()@spikes),max(quality()@spikes)),
+         type = 'n', ann = FALSE, axes = FALSE, frame.plot = TRUE,
+         ylim = c(min(quality()@spikes), max(quality()@spikes)),
+         xlim = c(1,5))
+    
+    dummy<-apply(cbind(quality()@spikes,plotColors(),1:length(sampleNames(rawData()))),1,
+                 function(x) {
+                   par(new=TRUE);
+                   plot(as.numeric(x[1:(length(x)-2)]),
+                        type = 'b', ann=FALSE, axes=FALSE, pch='.', cex=4, lwd=2, 
+                        col=x[length(x)-1], lty = as.numeric(x[length(x)]),
+                        ylim=c(min(quality()@spikes),max(quality()@spikes)), xlim = c(1,5))})
+    
+    title(main = "Spike-in Hybridization controls intensities and calls",
+          ylab="Intensity",cex.lab=0.8) 
+    label3<-""
+    title1<-"Intensities: OK (bioB < bioC < bioD < creX for all arrays)"
+    title2<-"BioB Present calls: OK (indeed all bioB are called present)"
+    
+    # test for bioB<bioC<bioD<creX
+    bad1 <- colnames(t(quality()@spikes))[!(quality()@spikes[,1]<quality()@spikes[,2] 
+                                            & quality()@spikes[,2]<quality()@spikes[,3] 
+                                            & quality()@spikes[,3]<quality()@spikes[,4])]
+    if(length(bad1)>0){    
+      title1<-paste("Intensity: not OK (some array",ifelse(length(bad1)>1,"s",""),
+                    " do",ifelse(length(bad1)>1,"","es")," not follow the rule bioB < bioC < bioD < creX)",sep="")
+    }
+    
+    # test for bioB presence
+    bad2<-gsub(".present","",names(quality()@bioBCalls[quality()@bioBCalls != 'P']))
+    if(length(bad2)>0){
+      title2<-paste("BioB present calls: not OK (",length(bad2),"/",
+                    length(quality()@bioBCalls)," bioB not called present)")
+    }
+    if(length(quality()@bioBCalls[quality()@bioBCalls =='P'])==0){
+      label3 <- 
+        "\nApparently no Hybridization controls were spiked on these arrays."
+    }
+    
+    title(xlab = c(title1,title2), cex.lab = 0.8)
+    legend("topleft", paste("bioB present calls = ", 
+                            length(quality()@bioBCalls[quality()@bioBCalls == "P"]),"/",
+                            length(quality()@bioBCalls),label3), bty = "n", cex=0.7)
+    
+    if(length(sampleNames(rawData())) < (MAXARRAY+20)){
+      cexval <- 0.65
+    }else{
+      cexval <- 0.45
+    }              
+    
+    legend("bottomright", substr(sampleNames(rawData()),1,20), lwd=2,
+           col = plotColors(), cex = cexval, bty = "n", lt = 1:length(sampleNames(rawData())))
+    par(cex.axis = 0.8) 
+    axis(2)
+    axis(1, at=1:4, labels = names(colnames(quality()@spikes)))
+    
+    if(length(bad2)>0){
+      text(c(rep(0.89,length(quality()@bioBCalls[quality()@bioBCalls!='P']))),
+           quality()@spikes[quality()@bioBCalls!='P',1], 
+           quality()@bioBCalls[quality()@bioBCalls!='P'], pos=4,offset=0.2, 
+           cex=0.8, col="red")
+    }  
+    dev.off()
+    
+    list(src = RawDataSpikeinHybridControl,width = WIDTH,height = HEIGHT,alt = "This is alternate text")
+  })
   
   # Percent Present
   output$percentpresent<-renderImage({
     req(input$percentpresent)
-    Data <- rawData()
-    plotColors<-plotColors()
-    experimentFactor<-experimentFactor()
-    legendColors<-legendColors()
-    quality <- NULL
+    # Define the reference for the grey rectangle (it should minimize the number of outliers)
+    ppMin <- min(quality@percent.present)
+    ppMax <- max(quality@percent.present)
+    ppMean<- mean(quality@percent.present)
     
-    if(is.null(experimentFactor)) stop("the 'experimentFactor' parameter is required")
-    if(is.null(plotColors)) stop("the 'plotColors' parameter is required")
-    if(is.null(legendColors)) stop("the 'legendColors' parameter is required")
-    if(is.null(quality)) try(quality <- qc(Data),TRUE)
-    
-    if(!is.null(quality)) {
-      # Define the reference for the grey rectangle (it should minimize the number of outliers)
-      ppMin <- min(quality@percent.present)
-      ppMax <- max(quality@percent.present)
-      ppMean<- mean(quality@percent.present)
-      
-      ref<-cbind(c(ppMean-5,ppMin,ppMax-10),c(ppMean+5,ppMin+10,ppMax))
-      reftext<-c("[mean-5% ; mean+5%]", "[min ; min+10%]", "[max-10% ; max]")
-      t1 <- (quality@percent.present >= (ppMean-5) & quality@percent.present <= (ppMean+5))
-      t2 <- (quality@percent.present >= ppMin & quality@percent.present <= (ppMin+10))	
-      t3 <- (quality@percent.present >= (ppMax-10) & quality@percent.present <= ppMax)	
-      outliers <- c(length(t1[t1==FALSE]),length(t2[t2==FALSE]), length(t3[t3==FALSE]))
-      if(outliers[1] == 0){
-        ref<- ref[1,]
-        reftext<- reftext[1]
-      }else{
-        ref<- ref[outliers==min(outliers),] # less outliers
-        if(length(ref) > 3) { ref<-ref[1,] }
-        reftext<- reftext[outliers==min(outliers)] # less outliers
-        if(length(reftext) > 1) { reftext<-reftext[1] }		
-      }
-      testMin <- ref[1]
-      testMax <- ref[2]
-      
-      RawDataPercentPresent<- tempfile(fileext='.png')
-      png(file = RawDataPercentPresent,width=WIDTH,height=HEIGHT,pointsize=POINTSIZE)
-      par(mfrow=c(1,2),oma=c(17,0.5,0,0.5),cex.axis=0.8)
-      plot(quality@percent.present, type='n', ann=FALSE, axes=FALSE, 
-           frame.plot=TRUE, pch='.', cex=10,  ylim=c(0,100))
-      rect(0, testMin, length(quality@scale.factors)+1,
-           testMax, col=gray(0.9), border=FALSE)
-      
-      for(i in seq(from=0, to=100, by=20)){
-        abline(h=i,lty=2,col=gray(0.8))
-      }
-      abline(h=50,lty=1,col=gray(0.5))
-      
-      par(new=TRUE)
-      plot(quality@percent.present, type='h', ann=FALSE, axes=FALSE, 
-           frame.plot=TRUE, pch='.',lwd=3, col=plotColors, ylim=c(0,100))
-      par(new=TRUE)
-      plot(quality@percent.present,type='p', ann=FALSE, axes=FALSE, 
-           frame.plot=TRUE, pch='.',cex=10, col=plotColors, ylim=c(0,100))
-      
-      t1 <- (quality@percent.present >= testMin & quality@percent.present <= testMax)
-      if(length(t1[t1==FALSE])>0 && length(sampleNames(Data))>=(MAXARRAY/2)){
-        if(length(t1[t1==FALSE])<25){
-          textlab<-sampleNames(Data)[t1==FALSE]
-          legend("topleft", c("Outliers, from left to right",textlab), 
-                 text.col = c(1, rep("red",length(textlab))), bty = "n",cex=0.38)  	
-        }else{
-          mtext("Too many arrays and outliers; \nsee details on the QC table",side=1,cex=0.8,line=3)
-        }			  
-      }	
-      
-      title(main="Plot of percent present",xlab="",ylab="percentage")
-      axis(2)	
-      par(cex.axis=0.65)
-      if(length(sampleNames(Data))<(MAXARRAY/2)){ # array names not reported if more than 20 arrays
-        axis(1,at=1:length(quality@percent.present),las=2,labels=sampleNames(Data))
-      }	
-      
-      if(length(levels(experimentFactor))>1){
-        legend("topright", levels(experimentFactor),
-               col = legendColors, fill = legendColors, cex = 0.55, bty = "n")
-      }
-      
-      legend("bottomright", c(paste("min = ", round(ppMin,2), sep="" ), 
-                              paste("max = ", round(ppMax,2), sep="" ), 
-                              paste("max-min = ", round(ppMax-ppMin,2), sep="")), bty = "o",cex = 0.55)
-      
-      mtext(paste(
-        "Data should be in the grey rectangle representing a spread of 10%"
-        #"Data should stand within the grey rectangle",reftext
-      ), 
-      side=4, font=1, cex=0.7)
-      par(cex.axis=0.8, cex.lab=0.8)       
-      boxplot(quality@percent.present)
-      title(main="Boxplot of percent present")
-      if(ppMax-ppMin <= 10){
-        title(xlab="Percent present QC: OK (spread <= 10%)")
-      } else{
-        title(xlab="Percent present QC: not OK (spread > 10%)")
-      } 
-      
-      dev.off()
-      
-      list(src = RawDataPercentPresent,
-           width = WIDTH,
-           height = HEIGHT,
-           alt = "This is alternate text")
-    } else {
-      warning("Percent present plot is not computed for this chip type")  
+    ref<-cbind(c(ppMean-5,ppMin,ppMax-10),c(ppMean+5,ppMin+10,ppMax))
+    reftext<-c("[mean-5% ; mean+5%]", "[min ; min+10%]", "[max-10% ; max]")
+    t1 <- (quality@percent.present >= (ppMean-5) & quality@percent.present <= (ppMean+5))
+    t2 <- (quality@percent.present >= ppMin & quality@percent.present <= (ppMin+10))	
+    t3 <- (quality@percent.present >= (ppMax-10) & quality@percent.present <= ppMax)	
+    outliers <- c(length(t1[t1==FALSE]),length(t2[t2==FALSE]), length(t3[t3==FALSE]))
+    if(outliers[1] == 0){
+      ref<- ref[1,]
+      reftext<- reftext[1]
+    }else{
+      ref<- ref[outliers==min(outliers),] # less outliers
+      if(length(ref) > 3) { ref<-ref[1,] }
+      reftext<- reftext[outliers==min(outliers)] # less outliers
+      if(length(reftext) > 1) { reftext<-reftext[1] }		
     }
-  },deleteFile = T)
+    testMin <- ref[1]
+    testMax <- ref[2]
+    
+    RawDataPercentPresent<- tempfile(fileext='.png')
+    png(file = RawDataPercentPresent,width=WIDTH,height=HEIGHT,pointsize=POINTSIZE)
+    par(mfrow=c(1,2),oma=c(17,0.5,0,0.5),cex.axis=0.8)
+    plot(quality@percent.present, type='n', ann=FALSE, axes=FALSE, 
+         frame.plot=TRUE, pch='.', cex=10,  ylim=c(0,100))
+    rect(0, testMin, length(quality@scale.factors)+1,
+         testMax, col=gray(0.9), border=FALSE)
+    
+    for(i in seq(from=0, to=100, by=20)){
+      abline(h=i,lty=2,col=gray(0.8))
+    }
+    abline(h=50,lty=1,col=gray(0.5))
+    
+    par(new=TRUE)
+    plot(quality@percent.present, type='h', ann=FALSE, axes=FALSE, 
+         frame.plot=TRUE, pch='.',lwd=3, col=plotColors(), ylim=c(0,100))
+    par(new=TRUE)
+    plot(quality@percent.present,type='p', ann=FALSE, axes=FALSE, 
+         frame.plot=TRUE, pch='.',cex=10, col=plotColors(), ylim=c(0,100))
+    
+    t1 <- (quality@percent.present >= testMin & quality@percent.present <= testMax)
+    if(length(t1[t1==FALSE])>0 && length(sampleNames(rawData()))>=(MAXARRAY/2)){
+      if(length(t1[t1==FALSE])<25){
+        textlab<-sampleNames(rawData())[t1==FALSE]
+        legend("topleft", c("Outliers, from left to right",textlab), 
+               text.col = c(1, rep("red",length(textlab))), bty = "n",cex=0.38)  	
+      }else{
+        mtext("Too many arrays and outliers; \nsee details on the QC table",side=1,cex=0.8,line=3)
+      }			  
+    }	
+    
+    title(main="Plot of percent present",xlab="",ylab="percentage")
+    axis(2)	
+    par(cex.axis=0.65)
+    if(length(sampleNames(rawData()))<(MAXARRAY/2)){ # array names not reported if more than 20 arrays
+      axis(1,at=1:length(quality@percent.present),las=2,labels=sampleNames(rawData()))
+    }	
+    
+    if(length(levels(experimentFactor()))>1){
+      legend("topright", levels(experimentFactor()),
+             col = legendColorsr(), fill = legendColorsr(), cex = 0.55, bty = "n")
+    }
+    
+    legend("bottomright", c(paste("min = ", round(ppMin,2), sep="" ), 
+                            paste("max = ", round(ppMax,2), sep="" ), 
+                            paste("max-min = ", round(ppMax-ppMin,2), sep="")), bty = "o",cex = 0.55)
+    
+    mtext(paste(
+      "Data should be in the grey rectangle representing a spread of 10%"
+      #"Data should stand within the grey rectangle",reftext
+    ), 
+    side=4, font=1, cex=0.7)
+    par(cex.axis=0.8, cex.lab=0.8)       
+    boxplot(quality@percent.present)
+    title(main="Boxplot of percent present")
+    if(ppMax-ppMin <= 10){
+      title(xlab="Percent present QC: OK (spread <= 10%)")
+    } else{
+      title(xlab="Percent present QC: not OK (spread > 10%)")
+    } 
+    
+    dev.off()
+    
+    list(src = RawDataPercentPresent,width = WIDTH,height = HEIGHT,alt = "This is alternate text")
+  })
   
   # Positive/Negative Distribution
   output$posnegdistro<-renderImage({
     req(input$posnegdistro)
-    Data <- rawData()
     RawDataPosNegDistribution<- tempfile(fileext='.png')
     png(file = RawDataPosNegDistribution,width=WIDTH,height=HEIGHT,pointsize=POINTSIZE)
     par(oma=c(17,0,0,0),srt=90)  
-    borderQC1(Data)
+    borderQC1(rawData())
     mtext(paste("All distributions should be similar and","extreme values should not be reached\n"), side=3, cex=0.7)
     dev.off()
-    list(src = RawDataPosNegDistribution,
-         width = WIDTH,
-         height = HEIGHT,
-         alt = "This is alternate text")
-  },deleteFile = T)
+    list(src = RawDataPosNegDistribution,width = WIDTH,height = HEIGHT,alt = "This is alternate text")
+  })
   
   # Background intensities
   output$backgroundintensity<-renderImage({
     req(input$backgroundintensity)
-    Data <- rawData
-    quality<-NULL
-    experimentFactor<-experimentFactor()
-    plotColors=plotColors()
-    legendColors=legendColors()
     
-    if(is.null(experimentFactor)) stop("the 'experimentFactor' parameter is required")
-    if(is.null(plotColors)) stop("the 'plotColors' parameter is required")
-    if(is.null(legendColors)) stop("the 'legendColors' parameter is required")
-    if(is.null(quality)) try(quality <- qc(Data),TRUE)
-    
-    if(!is.null(quality)) {  
-      
-      # Define the reference for the grey rectangle (it should minimize the number of outliers)
-      bgMean<-mean(quality@average.background)
-      bgMin <- min(quality@average.background)
-      bgMax <- max(quality@average.background)
-      ref<-cbind(c(bgMean-10,bgMin,bgMax-20),c(bgMean+10,bgMin+20,bgMax))
-      reftext<-c("[mean-10 ; mean+10]", "[min ; min+20]", "[max-20 ; max]")
-      t1 <- (quality@average.background >= (bgMean-10) & quality@average.background <= (bgMean+10))
-      t2 <- (quality@average.background >= bgMin & quality@average.background <= (bgMin+20))	
-      t3 <- (quality@average.background >= (bgMax-20) & quality@average.background <= bgMax)	
-      outliers <- c(length(t1[t1==FALSE]),length(t2[t2==FALSE]), length(t3[t3==FALSE]))
-      if(outliers[1] == 0){
-        ref<- ref[1,]
-        reftext<-reftext[1]
-      }else{
-        ref<- ref[outliers==min(outliers),] # less outliers
-        if(length(ref) > 3) { ref<-ref[1,] }
-        reftext<- reftext[outliers==min(outliers)] # less outliers
-        if(length(reftext) > 1) { reftext<-reftext[1] }				
-      }
-      testMin <- ref[1]
-      testMax <- ref[2]
-      
-      ylimit = c(0, max(max(quality@maximum.background), 
-                        testMax)+5)
-      
-      RawDataBackground<- tempfile(fileext='.png')
-      png(file = RawDataBackground,width=WIDTH,height=HEIGHT,pointsize=POINTSIZE)
-      par(mfrow=c(1,2),oma=c(17,0.5,0,0.5),cex.axis=0.8)
-      plot(c(quality@minimum.background, quality@maximum.background),
-           type = 'n', ann=FALSE, axes=FALSE, frame.plot=TRUE, pch='.', cex=10, 
-           xlim = c(1,length(quality@maximum.background+1)),
-           ylim = ylimit)
-      rect(0,testMin, 
-           length(quality@average.background)+1, 
-           testMax, 
-           col=gray(0.8), border=TRUE, density=10, lty=6)           
-      par(new=TRUE)
-      plot(quality@maximum.background,
-           type = 'h', ann=FALSE, axes=FALSE, frame.plot=TRUE, pch='.', lwd=3, 
-           col=plotColors, ylim = ylimit)
-      par(new=TRUE)
-      plot(quality@minimum.background,
-           type = 'h', ann=FALSE, axes=FALSE, frame.plot=TRUE, pch='.', lwd=4, 
-           col='white', ylim = ylimit)        
-      par(new=TRUE)
-      plot(quality@maximum.background,
-           type = 'p', ann=FALSE, axes=FALSE, frame.plot=TRUE, pch=6, cex=0.5,
-           ylim = ylimit)
-      par(new=TRUE)
-      plot(quality@minimum.background,
-           type = 'p', ann=FALSE, axes=FALSE, frame.plot=TRUE, pch=2, cex=0.5,
-           ylim=ylimit)
-      par(new=TRUE)
-      plot(quality@average.background, 
-           type='p', ann=FALSE, axes=FALSE, frame.plot=TRUE, pch=3, cex=1,
-           ylim=ylimit)
-      abline(h=testMin, col=gray(0.8), ylim=ylimit)
-      abline(h=testMax, col=gray(0.8), ylim=ylimit)	
-      title(main="Plot of background intensity",xlab="",ylab="background intensity")
-      axis(2)
-      par(cex.axis=0.65)
-      if(length(sampleNames(Data))<(MAXARRAY/2)){ # array names not reported if more than 20 arrays
-        axis(1,at=1:length(quality@average.background),las=2,labels=sampleNames(Data))
-      }		
-      if(length(levels(experimentFactor))>1){    
-        legend("bottomright", c(levels(experimentFactor),"max bg","average bg", 
-                                "min bg"), col = c(legendColors, 1, 1, 1), 
-               pch = c(rep(15, length(legendColors)),6,3,2), bty = "n", cex=0.55)
-      }else{
-        legend("bottomright", c("max bg","average bg", 
-                                "min bg"), col = c(1, 1, 1), pch = c(6,3,2), bty = "n", cex=0.55)    
-      }
-      t1 <- (quality@average.background >= testMin & quality@average.background <= testMax)
-      if(length(t1[t1==FALSE])>0 && length(sampleNames(Data))>=(MAXARRAY/2)){
-        if(length(t1[t1==FALSE])<25){
-          textlab<-sampleNames(Data)[t1==FALSE]
-          legend("bottomleft", c("Outliers, from left to right",textlab), 
-                 text.col = c(1, rep("red",length(textlab))), bty = "n",cex=0.38)   
-        }else{
-          mtext("Too many arrays and outliers; \nsee details on the QC table",side=1,cex=0.8,line=3)
-        }	 		  
-      }	
-      
-      mtext(paste(
-        "Data should be in the grey rectangle representing a spread of 20"
-        #"Data should stand within the dashed grey rectangle",reftext
-      ), side=4, font=1, cex=0.7)
-      par(cex.axis=0.8, cex.lab=0.8)            
-      boxplot(quality@average.background)
-      title(main="Average background intensity")
-      
-      if(bgMax - bgMin <= 20){
-        title(xlab="Background QC: OK (spread <= 20)")
-      } else{
-        title(xlab="Background QC: not OK (spread > 20)")
-      }     
-      
-      legend("bottomleft", c(paste("min = ", round(bgMin,2), sep="" ), 
-                             paste("max = ", round(bgMax,2), sep="" ), 
-                             paste("max-min = ", round(bgMax-bgMin,2), sep="")), cex=0.7)        
-      
-      dev.off()
-      
-      list(src = RawDataBackground,
-           width = WIDTH,
-           height = HEIGHT,
-           alt = "This is alternate text")
-    } else {
-      warning("Background intensity plot is not computed for this chip type")
+    # Define the reference for the grey rectangle (it should minimize the number of outliers)
+    bgMean<-mean(quality()@average.background)
+    bgMin <- min(quality()@average.background)
+    bgMax <- max(quality()@average.background)
+    ref<-cbind(c(bgMean-10,bgMin,bgMax-20),c(bgMean+10,bgMin+20,bgMax))
+    reftext<-c("[mean-10 ; mean+10]", "[min ; min+20]", "[max-20 ; max]")
+    t1 <- (quality()@average.background >= (bgMean-10) & quality()@average.background <= (bgMean+10))
+    t2 <- (quality()@average.background >= bgMin & quality()@average.background <= (bgMin+20))	
+    t3 <- (quality()@average.background >= (bgMax-20) & quality()@average.background <= bgMax)	
+    outliers <- c(length(t1[t1==FALSE]),length(t2[t2==FALSE]), length(t3[t3==FALSE]))
+    if(outliers[1] == 0){
+      ref<- ref[1,]
+      reftext<-reftext[1]
+    }else{
+      ref<- ref[outliers==min(outliers),] # less outliers
+      if(length(ref) > 3) { ref<-ref[1,] }
+      reftext<- reftext[outliers==min(outliers)] # less outliers
+      if(length(reftext) > 1) { reftext<-reftext[1] }				
     }
-  },deleteFile = T)
+    testMin <- ref[1]
+    testMax <- ref[2]
+    
+    ylimit = c(0, max(max(quality()@maximum.background), 
+                      testMax)+5)
+    
+    RawDataBackground<- tempfile(fileext='.png')
+    png(file = RawDataBackground,width=WIDTH,height=HEIGHT,pointsize=POINTSIZE)
+    par(mfrow=c(1,2),oma=c(17,0.5,0,0.5),cex.axis=0.8)
+    plot(c(quality()@minimum.background, quality()@maximum.background),
+         type = 'n', ann=FALSE, axes=FALSE, frame.plot=TRUE, pch='.', cex=10, 
+         xlim = c(1,length(quality()@maximum.background+1)),
+         ylim = ylimit)
+    rect(0,testMin, 
+         length(quality()@average.background)+1, 
+         testMax, 
+         col=gray(0.8), border=TRUE, density=10, lty=6)           
+    par(new=TRUE)
+    plot(quality()@maximum.background,
+         type = 'h', ann=FALSE, axes=FALSE, frame.plot=TRUE, pch='.', lwd=3, 
+         col=plotColors(), ylim = ylimit)
+    par(new=TRUE)
+    plot(quality()@minimum.background,
+         type = 'h', ann=FALSE, axes=FALSE, frame.plot=TRUE, pch='.', lwd=4, 
+         col='white', ylim = ylimit)        
+    par(new=TRUE)
+    plot(quality()@maximum.background,
+         type = 'p', ann=FALSE, axes=FALSE, frame.plot=TRUE, pch=6, cex=0.5,
+         ylim = ylimit)
+    par(new=TRUE)
+    plot(quality()@minimum.background,
+         type = 'p', ann=FALSE, axes=FALSE, frame.plot=TRUE, pch=2, cex=0.5,
+         ylim=ylimit)
+    par(new=TRUE)
+    plot(quality()@average.background, 
+         type='p', ann=FALSE, axes=FALSE, frame.plot=TRUE, pch=3, cex=1,
+         ylim=ylimit)
+    abline(h=testMin, col=gray(0.8), ylim=ylimit)
+    abline(h=testMax, col=gray(0.8), ylim=ylimit)	
+    title(main="Plot of background intensity",xlab="",ylab="background intensity")
+    axis(2)
+    par(cex.axis=0.65)
+    if(length(sampleNames(rawData()))<(MAXARRAY/2)){ # array names not reported if more than 20 arrays
+      axis(1,at=1:length(quality()@average.background),las=2,labels=sampleNames(rawData()))
+    }		
+    if(length(levels(experimentFactor()))>1){    
+      legend("bottomright", c(levels(experimentFactor()),"max bg","average bg", 
+                              "min bg"), col = c(legendColors(), 1, 1, 1), 
+             pch = c(rep(15, length(legendColors())),6,3,2), bty = "n", cex=0.55)
+    }else{
+      legend("bottomright", c("max bg","average bg", 
+                              "min bg"), col = c(1, 1, 1), pch = c(6,3,2), bty = "n", cex=0.55)    
+    }
+    t1 <- (quality()@average.background >= testMin & quality()@average.background <= testMax)
+    if(length(t1[t1==FALSE])>0 && length(sampleNames(rawData()))>=(MAXARRAY/2)){
+      if(length(t1[t1==FALSE])<25){
+        textlab<-sampleNames(rawData())[t1==FALSE]
+        legend("bottomleft", c("Outliers, from left to right",textlab), 
+               text.col = c(1, rep("red",length(textlab))), bty = "n",cex=0.38)   
+      }else{
+        mtext("Too many arrays and outliers; \nsee details on the QC table",side=1,cex=0.8,line=3)
+      }	 		  
+    }	
+    
+    mtext(paste(
+      "Data should be in the grey rectangle representing a spread of 20"
+      #"Data should stand within the dashed grey rectangle",reftext
+    ), side=4, font=1, cex=0.7)
+    par(cex.axis=0.8, cex.lab=0.8)            
+    boxplot(quality()@average.background)
+    title(main="Average background intensity")
+    
+    if(bgMax - bgMin <= 20){
+      title(xlab="Background QC: OK (spread <= 20)")
+    } else{
+      title(xlab="Background QC: not OK (spread > 20)")
+    }     
+    
+    legend("bottomleft", c(paste("min = ", round(bgMin,2), sep="" ), 
+                           paste("max = ", round(bgMax,2), sep="" ), 
+                           paste("max-min = ", round(bgMax-bgMin,2), sep="")), cex=0.7)        
+    
+    dev.off()
+    
+    list(src = RawDataBackground,width = WIDTH,height = HEIGHT,alt = "This is alternate text") 
+  })
+  
+  ##### Signal comparability and bias diagnostic #####
+  # Inputs
+  output$signalInput <- renderUI({
+    tagList(
+      if(!is.null(quality())) {
+        checkboxInput(inputId = "scalefactors",label = "Scale Factors",value =  T)
+      },
+      checkboxInput(inputId = "boxplotRaw",label = "Boxplot",value = T),
+      checkboxInput(inputId = "densityRaw",label = "Density histogram",value =  T),
+      checkboxInput(inputId = "controlplot",label = "Control profiles and affx boxplots",value = T)
+    )
+  })
   
   # Scale factors
   output$scalefactors<-renderImage({
     req(input$scalefactors)
-    Data <- rawData
-    quality=NULL
-    experimentFactor=experimentFactor()
-    plotColors=plotColors()
-    legendColors=legendColors()
     
-    if(is.null(experimentFactor)) stop("the 'experimentFactor' parameter is required")
-    if(is.null(plotColors)) stop("the 'plotColors' parameter is required")
-    if(is.null(legendColors)) stop("the 'legendColors' parameter is required")
-    if(is.null(quality)) try(quality <- qc(Data),TRUE)
-    
-    if(!is.null(quality)) {
-      
-      # Define the reference for the grey rectangle (it should minimize the number of outliers)
-      sfMin <- min(log2(quality@scale.factors))
-      sfMax <- max(log2(quality@scale.factors))
-      sfMean<- mean(log2(quality@scale.factors))
-      ref<-cbind(c(sfMean-1.5,sfMin,sfMax-3),c(sfMean+1.5,sfMin+3,sfMax))
-      t1 <- (log2(quality@scale.factors) >= (sfMean-1.5) & log2(quality@scale.factors) <= (sfMean+1.5))
-      t2 <- (log2(quality@scale.factors) >= sfMin & log2(quality@scale.factors) <= (sfMin+3))	
-      t3 <- (log2(quality@scale.factors) >= (sfMax-3) & log2(quality@scale.factors) <= sfMax)	
-      outliers <- c(length(t1[t1==FALSE]),length(t2[t2==FALSE]), length(t3[t3==FALSE]))
-      if(outliers[1] == 0){
-        ref<- ref[1,]
-      }else{
-        ref<- ref[outliers==min(outliers),] # less outliers
-        if(length(ref) > 3) { ref<-ref[1,] }		
-      }
-      testMin <- ref[1]
-      testMax <- ref[2]
-      
-      ymin <- min(-3.5, sfMin-1.5, testMin)
-      ymax <- max(+3.5, sfMax+1.5, testMax) 
-      ylimit <-c(ymin, ymax) 
-      
-      RawDataScaleFactors<- tempfile(fileext='.png')
-      png(file = RawDataScaleFactors,width=WIDTH,height=HEIGHT,pointsize=POINTSIZE)
-      
-      par(mfrow=c(1,2), oma=c(17,0.5,0,0.5), cex.axis=0.8)
-      plot(log2(quality@scale.factors), type='n', axes=FALSE, frame.plot=TRUE,
-           ann=FALSE, pch='.', cex=10, ylim = ylimit)
-      rect(0, testMin,
-           length(quality@scale.factors)+1, 
-           testMax, col=gray(0.9), border=FALSE)
-      
-      for(i in seq(from=ceiling(ymin), to=floor(ymax), by=1)){
-        abline(h=i,lty=2,col=gray(0.8))
-      }
-      abline(h=0,lty=1,col=gray(0.5))
-      
-      par(new=TRUE)
-      plot(log2(quality@scale.factors), 
-           type = 'h', axes=FALSE, frame.plot=TRUE, ann=FALSE,
-           pch='.', lwd=3, col=plotColors, ylim = ylimit)
-      par(new=TRUE)
-      plot(log2(quality@scale.factors), 
-           type = 'p', axes=FALSE, frame.plot=TRUE, ann=FALSE,pch='.',
-           cex=10, col=plotColors, ylim = ylimit)
-      t1 <- (log2(quality@scale.factors) >= testMin & log2(quality@scale.factors) <= testMax)
-      if(length(t1[t1==FALSE])>0 && length(sampleNames(Data))>=(MAXARRAY/2)){
-        if(length(t1[t1==FALSE])<16){
-          textlab<-sampleNames(Data)[t1==FALSE]
-          legend("bottomleft", c("Outliers, from left to right",textlab), 
-                 text.col = c(1, rep("red",length(textlab))), bty = "n",cex=0.38)  	
-        }else{
-          mtext("Too many arrays and outliers; \nsee details on the QC table",side=1,cex=0.8,line=3)
-        }	 		  
-      }
-      
-      title(main="Plot of Log scale factors", xlab="",ylab="Log2(scale factors)")
-      axis(2)
-      par(cex.axis=0.65)
-      if(length(sampleNames(Data))<(MAXARRAY/2)){ # array names not reported if more than 20 arrays
-        axis(1,at=1:length(quality@scale.factors),las=2,labels=sampleNames(Data))
-      }		
-      if(length(levels(experimentFactor))>1){ 
-        legend("topright", levels(experimentFactor),
-               col = legendColors, fill = legendColors, cex = 0.55, bty = "n")
-      } 
-      legend("topleft", c(paste("min = ", round(sfMin,2), sep="" ), 
-                          paste("max = ", round(sfMax,2), sep="" ), 
-                          paste("max - min = ",round((sfMax-sfMin),2),sep="")), bty = "n",
-             cex = 0.55)
-      
-      mtext(paste(
-        "Data should be in the grey rectangle representing 3-fold on a log scale"
-      ), side=4,  font=1, cex=0.7)
-      par(cex.axis=0.8)       
-      boxplot(quality@scale.factors)
-      title(main="Boxplot of scale factors")
-      mtext("(natural scale)\n", side=3, font=1, cex=0.7)
-      par(cex=0.8)
-      if((sfMax - sfMin) < 3){
-        
-        title(xlab="Scale factors QC: OK (spread < 3-fold)")
-      } else{
-        title(xlab="Scale factors QC: not OK (spread > 3-fold)")
-      }         
-      dev.off()
-      
-      list(src = RawDataScaleFactors,
-           width = WIDTH,
-           height = HEIGHT,
-           alt = "This is alternate text")
-    } else {
-      warning("Scale factor plot is not computed for this chip type")
+    # Define the reference for the grey rectangle (it should minimize the number of outliers)
+    sfMin <- min(log2(quality()@scale.factors))
+    sfMax <- max(log2(quality()@scale.factors))
+    sfMean<- mean(log2(quality()@scale.factors))
+    ref<-cbind(c(sfMean-1.5,sfMin,sfMax-3),c(sfMean+1.5,sfMin+3,sfMax))
+    t1 <- (log2(quality()@scale.factors) >= (sfMean-1.5) & log2(quality()@scale.factors) <= (sfMean+1.5))
+    t2 <- (log2(quality()@scale.factors) >= sfMin & log2(quality()@scale.factors) <= (sfMin+3))	
+    t3 <- (log2(quality()@scale.factors) >= (sfMax-3) & log2(quality()@scale.factors) <= sfMax)	
+    outliers <- c(length(t1[t1==FALSE]),length(t2[t2==FALSE]), length(t3[t3==FALSE]))
+    if(outliers[1] == 0){
+      ref<- ref[1,]
+    }else{
+      ref<- ref[outliers==min(outliers),] # less outliers
+      if(length(ref) > 3) { ref<-ref[1,] }		
     }
-  },deleteFile = T)
+    testMin <- ref[1]
+    testMax <- ref[2]
+    
+    ymin <- min(-3.5, sfMin-1.5, testMin)
+    ymax <- max(+3.5, sfMax+1.5, testMax) 
+    ylimit <-c(ymin, ymax) 
+    
+    RawDataScaleFactors<- tempfile(fileext='.png')
+    png(file = RawDataScaleFactors,width=WIDTH,height=HEIGHT,pointsize=POINTSIZE)
+    
+    par(mfrow=c(1,2), oma=c(17,0.5,0,0.5), cex.axis=0.8)
+    plot(log2(quality()@scale.factors), type='n', axes=FALSE, frame.plot=TRUE,
+         ann=FALSE, pch='.', cex=10, ylim = ylimit)
+    rect(0, testMin,
+         length(quality()@scale.factors)+1, 
+         testMax, col=gray(0.9), border=FALSE)
+    
+    for(i in seq(from=ceiling(ymin), to=floor(ymax), by=1)){
+      abline(h=i,lty=2,col=gray(0.8))
+    }
+    abline(h=0,lty=1,col=gray(0.5))
+    
+    par(new=TRUE)
+    plot(log2(quality()@scale.factors), 
+         type = 'h', axes=FALSE, frame.plot=TRUE, ann=FALSE,
+         pch='.', lwd=3, col=plotColors(), ylim = ylimit)
+    par(new=TRUE)
+    plot(log2(quality()@scale.factors), 
+         type = 'p', axes=FALSE, frame.plot=TRUE, ann=FALSE,pch='.',
+         cex=10, col=plotColors(), ylim = ylimit)
+    t1 <- (log2(quality()@scale.factors) >= testMin & log2(quality()@scale.factors) <= testMax)
+    if(length(t1[t1==FALSE])>0 && length(sampleNames(rawData()))>=(MAXARRAY/2)){
+      if(length(t1[t1==FALSE])<16){
+        textlab<-sampleNames(rawData())[t1==FALSE]
+        legend("bottomleft", c("Outliers, from left to right",textlab), 
+               text.col = c(1, rep("red",length(textlab))), bty = "n",cex=0.38)  	
+      }else{
+        mtext("Too many arrays and outliers; \nsee details on the QC table",side=1,cex=0.8,line=3)
+      }	 		  
+    }
+    
+    title(main="Plot of Log scale factors", xlab="",ylab="Log2(scale factors)")
+    axis(2)
+    par(cex.axis=0.65)
+    if(length(sampleNames(rawData()))<(MAXARRAY/2)){ # array names not reported if more than 20 arrays
+      axis(1,at=1:length(quality()@scale.factors),las=2,labels=sampleNames(rawData()))
+    }		
+    if(length(levels(experimentFactor()))>1){ 
+      legend("topright", levels(experimentFactor()),
+             col = legendColors(), fill = legendColors(), cex = 0.55, bty = "n")
+    } 
+    legend("topleft", c(paste("min = ", round(sfMin,2), sep="" ), 
+                        paste("max = ", round(sfMax,2), sep="" ), 
+                        paste("max - min = ",round((sfMax-sfMin),2),sep="")), bty = "n",
+           cex = 0.55)
+    
+    mtext(paste(
+      "Data should be in the grey rectangle representing 3-fold on a log scale"
+    ), side=4,  font=1, cex=0.7)
+    par(cex.axis=0.8)       
+    boxplot(quality()@scale.factors)
+    title(main="Boxplot of scale factors")
+    mtext("(natural scale)\n", side=3, font=1, cex=0.7)
+    par(cex=0.8)
+    if((sfMax - sfMin) < 3){
+      
+      title(xlab="Scale factors QC: OK (spread < 3-fold)")
+    } else{
+      title(xlab="Scale factors QC: not OK (spread > 3-fold)")
+    }         
+    dev.off()
+    
+    list(src = RawDataScaleFactors,width = WIDTH,height = HEIGHT,alt = "This is alternate text")
+  })
   
   # Raw Box plot
   output$boxplotRaw<-renderImage({
@@ -1045,25 +1021,18 @@ server <- function(input, output, session) {
           cex=0.7)
     dev.off()
     
-    list(src = DataBoxplot,
-         width = WIDTH,
-         height = HEIGHT,
-         alt = "This is alternate text")
-  },deleteFile = T)
+    list(src = DataBoxplot,width = WIDTH,height = HEIGHT,alt = "This is alternate text")
+  })
   
   # Density Histogram
   output$densityRaw<-renderImage({
     req(input$densityRaw)
-    Data <- rawData()
-    plotColors <- plotColors()
-    
-    if(is.null(plotColors)) stop("the 'plotColors' parameter is required")
-    
-    Type <- ifelse(class(Data) == "AffyBatch","Raw","Norm")
+     
+    Type <- ifelse(class(rawData()) == "AffyBatch","Raw","Norm")
     
     DensityHistogram<- tempfile(fileext='.png')
     png(file = DensityHistogram,width=WIDTH,height=HEIGHT,pointsize=POINTSIZE)
-    if(length(sampleNames(Data))<MAXARRAY){
+    if(length(sampleNames(rawData()))<MAXARRAY){
       cexval <- 0.65
       par(oma=c(12,0,0,0) )
     }else{
@@ -1071,42 +1040,29 @@ server <- function(input, output, session) {
       par(oma=c(0.1,0,0,0) )
     }    
     if(Type == "Raw"){
-      hist(Data, lwd=3, lt = 1:length(sampleNames(Data)), col = plotColors, 
+      hist(rawData(), lwd=3, lt = 1:length(sampleNames(rawData())), col = plotColors(), 
            which = "both", main="Density histogram of raw intensities", cex.axis = 0.7, cex.lab=0.8)
     }else{
       if(normMeth=="") stop("When providing a normalised data object, the normMeth parameter is required")
-      hist(Data, lwd=3, lt = 1:length(sampleNames(Data)), col = plotColors, 
+      hist(rawData(), lwd=3, lt = 1:length(sampleNames(rawData())), col = plotColors(), 
            main=paste("Density histogram after ", normMeth,"\n", sep=""), cex.axis = 0.7, cex.lab=0.8)
     } 
     
-    legend("topright", substr(sampleNames(Data),1,20), lwd=3, lt = 1:length(sampleNames(Data)),
-           col = plotColors, cex = cexval, bty = "n")           
+    legend("topright", substr(sampleNames(rawData()),1,20), lwd=3, lt = 1:length(sampleNames(rawData())),
+           col = plotColors(), cex = cexval, bty = "n")           
     mtext( "Curves should be comparable between arrays\n", side=3, font=1, 
            cex=0.7)
     dev.off()
-    list(src = DensityHistogram,
-         width = WIDTH,
-         height = HEIGHT,
-         alt = "This is alternate text")
-  },deleteFile = T)
+    list(src = DensityHistogram,width = WIDTH,height = HEIGHT,alt = "This is alternate text")
+  })
   
   # Control profiles affx
   output$controlplotaffx <- renderImage({
     req(input$controlplot)
-    Data <- rawData()
-    plotColors <- plotColors()
-    experimentFactor <- experimentFactor()
-    legendColors <- legendColors()
     
-    if(is.null(plotColors)) stop("The 'plotColors' parameter must be provided")
-    if(is.null(experimentFactor)) stop("the 'experimentFactor' parameter is required")
-    if(is.null(legendColors)) stop("the 'legendColors' parameter is required")
+    affx1 <- unique(probeNames(rawData())[grep("AFFX",probeNames(rawData()),fixed=TRUE)])
     
-    affx1 <- unique(probeNames(Data)[grep("AFFX",probeNames(Data),fixed=TRUE)])
-    
-    require("ArrayTools", quietly = TRUE)
-    
-    dataTable <- paste(substr(Data@annotation,1,nchar(Data@annotation)-2),"CONTROL",sep="")
+    dataTable <- paste(substr(rawData()@annotation,1,nchar(rawData()@annotation)-2),"CONTROL",sep="")
     suppressWarnings(eval(parse("",-1,paste("data(",dataTable,")",sep="")))) #ArrayTools
     cntrl <- NULL
     try(cntrl <- get(dataTable),TRUE)
@@ -1119,7 +1075,7 @@ server <- function(input, output, session) {
         #make sure that there are only letters in name2, to be used as variable name
         name2 <- gsub("[[:punct:]|[:digit:]]","",name2)
         assign(name2,cntrl[grep(name,cntrl[,2]),1])
-        assign(name2,get(name2)[get(name2) %in% geneNames(Data)])
+        assign(name2,get(name2)[get(name2) %in% geneNames(rawData())])
         if(length(get(name2))>0) cntrlVars <- c(cntrlVars,name2)
       }
     }
@@ -1161,7 +1117,7 @@ server <- function(input, output, session) {
         dummy<-sapply(
           affx2,
           function(y) {
-            pm<-log(pm(Data,as.character(y)),2)
+            pm<-log(pm(rawData(),as.character(y)),2)
             max_pm<-max(pm)
             min_pm<-min(pm)
             plot(0,type='n',ylim=c(min_pm,max_pm),ylab="expression",xlim=c(1,dim(pm)[1]),
@@ -1172,7 +1128,7 @@ server <- function(input, output, session) {
               2,
               function(z) {
                 assign("col",get("col",1)+1,1)
-                points(z,type='o',col=plotColors[get("col",1)])
+                points(z,type='o',col=plotColors()[get("col",1)])
               }
             )
             points(apply(pm,1,mean),type='l',lwd=2,col="black")
@@ -1183,36 +1139,23 @@ server <- function(input, output, session) {
         for(p in 1:number_empty) plot(0,type='n',xaxt='n',yaxt='n',bty='n',xlab="",ylab="",main="")
         par(mar=c(0,0,0,0))
         plot(0,type='n',xaxt='n',yaxt='n',bty='n',xlab="",ylab="",main="")
-        legend("topleft",c(sampleNames(Data),"","average"),lwd=c(rep(1,length(sampleNames(Data))),0,2),
-               pch=c(rep(1,length(sampleNames(Data))),-1,-1),col=c(plotColors,"white","black"),cex=1.5,bty="n") 
+        legend("topleft",c(sampleNames(rawData()),"","average"),lwd=c(rep(1,length(sampleNames(rawData()))),0,2),
+               pch=c(rep(1,length(sampleNames(rawData()))),-1,-1),col=c(plotColors(),"white","black"),cex=1.5,bty="n") 
         
         mtext("affx control profiles", side = 3, outer = TRUE, font = 2, cex = 2)
         
         dev.off()
-        list(src = RawDataAFFXControlsProfiles,
-             width = WIDTH,
-             height = HEIGHT,
-             alt = "This is alternate text")
+        list(src = RawDataAFFXControlsProfiles,width = WIDTH,height = HEIGHT,alt = "This is alternate text")
       }
   }, deleteFile = T)
   
   # Control profiles boxplot
   output$controlplotbox <- renderImage({
     req(input$controlplot)
-    Data <- rawData()
-    plotColors <- plotColors()
-    experimentFactor <- experimentFactor()
-    legendColors <- legendColors()
     
-    if(is.null(plotColors)) stop("The 'plotColors' parameter must be provided")
-    if(is.null(experimentFactor)) stop("the 'experimentFactor' parameter is required")
-    if(is.null(legendColors)) stop("the 'legendColors' parameter is required")
+    affx1 <- unique(probeNames(rawData())[grep("AFFX",probeNames(rawData()),fixed=TRUE)])
     
-    affx1 <- unique(probeNames(Data)[grep("AFFX",probeNames(Data),fixed=TRUE)])
-    
-    require("ArrayTools", quietly = TRUE)
-    
-    dataTable <- paste(substr(Data@annotation,1,nchar(Data@annotation)-2),"CONTROL",sep="")
+    dataTable <- paste(substr(rawData()@annotation,1,nchar(rawData()@annotation)-2),"CONTROL",sep="")
     suppressWarnings(eval(parse("",-1,paste("data(",dataTable,")",sep="")))) #ArrayTools
     cntrl <- NULL
     try(cntrl <- get(dataTable),TRUE)
@@ -1225,7 +1168,7 @@ server <- function(input, output, session) {
         #make sure that there are only letters in name2, to be used as variable name
         name2 <- gsub("[[:punct:]|[:digit:]]","",name2)
         assign(name2,cntrl[grep(name,cntrl[,2]),1])
-        assign(name2,get(name2)[get(name2) %in% geneNames(Data)])
+        assign(name2,get(name2)[get(name2) %in% geneNames(rawData())])
         if(length(get(name2))>0) cntrlVars <- c(cntrlVars,name2)
       }
     }
@@ -1238,7 +1181,7 @@ server <- function(input, output, session) {
       for(var in cntrlVars) {
         varName <- paste(var,"Data",sep="")
         assign(varName,NULL)
-        try(assign(varName,log(pm(Data,as.character(get(var))),2)),TRUE)
+        try(assign(varName,log(pm(rawData(),as.character(get(var))),2)),TRUE)
         if(!is.null(get(varName))) n<-n+1
       }
       #make boxplots of controls
@@ -1249,8 +1192,8 @@ server <- function(input, output, session) {
             png(RawDataAFFXControlsBoxplot, width=WIDTH, height=HEIGHT,pointsize=POINTSIZE)
             par(oma=c(17,0,0,0))
             boxplot(get(paste(cntrlVars,"Data",sep="")[i]), main=paste(gsub("1","",
-                                                                            cntrlVars[i],fixed=TRUE),"controls"), ylim=c(0,16), col=plotColors, cex=1, axes=FALSE)
-            if(length(sampleNames(Data))<MAXARRAY){
+                                                                            cntrlVars[i],fixed=TRUE),"controls"), ylim=c(0,16), col=plotColors(), cex=1, axes=FALSE)
+            if(length(sampleNames(rawData()))<MAXARRAY){
               cexval <- 0.65
             }else{
               cexval <- 0.45
@@ -1259,28 +1202,21 @@ server <- function(input, output, session) {
               legend("topright", levels(experimentFactor), col = legendColors, 
                      fill = legendColors, cex = 0.7, bg = "white", bty = "o")
             }     					
-            axis(1,at=1:length(sampleNames(Data)),las=2,labels=sampleNames(Data), cex.axis=cexval)        
+            axis(1,at=1:length(sampleNames(rawData())),las=2,labels=sampleNames(rawData()), cex.axis=cexval)        
             axis(2, cex.axis=0.7)  
             dev.off()
           }
         }
       }
-    list(src = RawDataAFFXControlsBoxplot,
-         width = WIDTH,
-         height = HEIGHT,
-         alt = "This is alternate text")
+    list(src = RawDataAFFXControlsBoxplot,width = WIDTH,height = HEIGHT,alt = "This is alternate text")
   }, deleteFile = T)
   
   # Layout Plot
   output$layoutplot<-renderImage({
     req(input$layoutplot)
-    Data <- rawData()
-    aType <- aType()
-    #stop if array type is not provided
-    if(is.null(aType)) stop("The aType parameters must be provided")
     
     #copy first array as a model
-    data.tmp <- Data[,1]
+    data.tmp <- rawData()[,1]
     
     #set every probe to intensity 1
     exprs(data.tmp)[] <- 1
@@ -1288,7 +1224,7 @@ server <- function(input, output, session) {
     #determine which are the perfect match rows in exprs
     rn_pm <- sort(as.numeric(rownames(pm(data.tmp))))
     rn_mm <- NULL
-    if(aType=="PMMM") {
+    if(aType()=="PMMM") {
       #determine which are the mismatch rows in exprs if present
       rn_mm <- sort(as.numeric(rownames(mm(data.tmp))))
       #set intensity of all mismatch probes if present to 2
@@ -1298,9 +1234,7 @@ server <- function(input, output, session) {
     #determine control probes
     affx <- grep("AFFX",probeNames(data.tmp),fixed=TRUE)
     
-    require("ArrayTools", quietly = TRUE)
-    
-    library <- paste(substr(Data@annotation,1,nchar(Data@annotation)-2),"transcriptcluster.db",sep="")
+    library <- paste(substr(rawData()@annotation,1,nchar(rawData()@annotation)-2),"transcriptcluster.db",sep="")
     suppressWarnings(eval(parse("",-1,paste("require(",library,", quietly = TRUE)",sep=""))))
     #get probe annotations
     all<-NULL
@@ -1309,7 +1243,7 @@ server <- function(input, output, session) {
       eval(parse("",-1,paste("try(all<-toTable(all2),TRUE)",sep="")))
     }
     
-    dataTable <- paste(substr(Data@annotation,1,nchar(Data@annotation)-2),"CONTROL",sep="")
+    dataTable <- paste(substr(rawData()@annotation,1,nchar(rawData()@annotation)-2),"CONTROL",sep="")
     suppressWarnings(eval(parse("",-1,paste("data(",dataTable,")",sep="")))) #ArrayTools
     cntrl <- NULL
     try(cntrl <- get(dataTable),TRUE)
@@ -1321,7 +1255,7 @@ server <- function(input, output, session) {
     if(length(affx)>0) {
       #set intensity of control probes to 5 for matches and to 8 for mismatches if present
       pm(data.tmp)[affx,] <- 5
-      if(aType=="PMMM") mm(data.tmp)[affx,] <- 8 
+      if(aType()=="PMMM") mm(data.tmp)[affx,] <- 8 
     }
     
     #if no cntrl object given: warn and skip plot
@@ -1329,7 +1263,7 @@ server <- function(input, output, session) {
       #set control probes to intensity 2 (affx, intron, exon)
       #these normally are the affx, intron, and exon probes as ag controls are not present in pm
       pm(data.tmp)[probeNames(data.tmp) %in% cntrl[,1],] <- 5
-      if(aType=="PMMM") mm(data.tmp)[probeNames(data.tmp) %in% cntrl[,1],] <- 8
+      if(aType()=="PMMM") mm(data.tmp)[probeNames(data.tmp) %in% cntrl[,1],] <- 8
     }
     
     #if given, set probes missing from list of annotated probes to NA
@@ -1337,7 +1271,7 @@ server <- function(input, output, session) {
       missingAnnotation <- !(probeNames(data.tmp) %in% all[,1])
       if(sum(missingAnnotation)>0) {
         pm(data.tmp)[missingAnnotation,] <- NA
-        if(aType=="PMMM") mm(data.tmp)[missingAnnotation,] <- NA
+        if(aType()=="PMMM") mm(data.tmp)[missingAnnotation,] <- NA
         lab_add <- " - white: other unannotated probe"
       }
     } 
@@ -1346,9 +1280,9 @@ server <- function(input, output, session) {
     exprs(data.tmp)[setdiff(1:dim(exprs(data.tmp))[1],c(rn_pm,rn_mm)),] <- 15
     
     #determine colors needed
-    colors <- c("black","#222222","blue","lightblue","red")[c(TRUE,aType=="PMMM",TRUE,aType=="PMMM",TRUE)]
+    colors <- c("black","#222222","blue","lightblue","red")[c(TRUE,aType()=="PMMM",TRUE,aType()=="PMMM",TRUE)]
     #set up label
-    if(aType=="PMMM") {
+    if(aType()=="PMMM") {
       xlab <- paste("black/gray: regular match/mismatch probe \n blue/light blue: ", 
                     "control match/mismatch probe \n red: unannotated probe (control region)\n",lab_add,sep="")
     } else {
@@ -1362,28 +1296,22 @@ server <- function(input, output, session) {
     image(data.tmp,col=colors,xlab=xlab,main="Array reference layout",cex.lab=0.8)
     dev.off()
     
-    list(src = RawDataReferenceArrayLayout,
-         width = WIDTH,
-         height = HEIGHT,
-         alt = "This is alternate text")
+    list(src = RawDataReferenceArrayLayout,width = WIDTH,height = HEIGHT,alt = "This is alternate text")
   }, deleteFile = T)
   
   # Positive/Negative controls
   output$posnegCOI<- renderImage({
     req(input$posnegCOI)
-    Data <- rawData()
+    
     RawDataPosNegPositions <- tempfile(fileext = '.png')
     png(file = RawDataPosNegPositions,width=WIDTH,height=HEIGHT,pointsize=POINTSIZE)
     par(oma=c(17,0,0,0),srt=90) 
-    borderQC2(Data)
+    borderQC2(rawData())
     mtext("COI absolute values should be < 0.5\n", side=3, cex=0.7)
     dev.off()
     
-    list(src = RawDataPosNegPositions,
-         width = WIDTH,
-         height = HEIGHT,
-         alt = "This is alternate text")
-  },deleteFile = T)
+    list(src = RawDataPosNegPositions,width = WIDTH,height = HEIGHT,alt = "This is alternate text")
+  })
 
   # Spatial images
   
@@ -1392,110 +1320,63 @@ server <- function(input, output, session) {
   # Nuse plot
   output$rawNuse <- renderImage({
     req(input$Nuse)
-    Data <- rawData()
-    Data.pset <- rawData.pset() 
-    experimentFactor <- experimentFactor()
-    plotColors <- plotColors()
-    legendColors <- legendColors()
-    WIDTH <- WIDTH
-    HEIGHT <- HEIGHT
-    POINTSIZE <- POINTSIZE
-    MAXARRAY <- MAXARRAY
       
-      if(is.null(experimentFactor)) stop("The 'experimentFactor' parameter must be specified")
-      if(is.null(plotColors)) stop("The 'plotColors' parameter must be specified")
-      if(is.null(legendColors)) stop("The 'legendColors' parameter must be specified")
-      
-      if(is.null(Data.pset)) {Data.pset <- fitPLM(Data)}   
-      
-      rawdataNUSE <- tempfile(fileext = ".png")
-      png(file = rawdataNUSE,width=WIDTH,height=HEIGHT,pointsize=POINTSIZE)   
-      par(oma=c(17,0,0,0), cex.axis=1)   
-      NUSE(Data.pset, col = plotColors,main="Normalized Unscaled Standard Errors (NUSE)", axes = FALSE)
-      if(length(sampleNames(Data))<MAXARRAY){
-        cexval <- 0.65
-      }else{
-        cexval <- 0.45
-      }  
-      axis(1,at=1:length(sampleNames(Data)),las=2,labels=sampleNames(Data), cex.axis=cexval)        
-      axis(2, cex.axis=0.7)      
-      if(length(levels(experimentFactor))>1){ 
-        legend("topright", levels(experimentFactor), col = legendColors,
-               fill = legendColors, cex = 0.7, bg = "white", bty = "o")
-      }
-      
-      mtext("NUSE median value should be < 1.1\n", side=3, font=1, cex=0.7)
-      dev.off()
-      
-      list(src = rawdataNUSE,
-           width = WIDTH,
-           height = HEIGHT,
-           alt = "This is alternate text")
+    rawdataNUSE <- tempfile(fileext = ".png")
+    png(file = rawdataNUSE,width=WIDTH,height=HEIGHT,pointsize=POINTSIZE)   
+    par(oma=c(17,0,0,0), cex.axis=1)   
+    NUSE(rawData.pset(), col = plotColors(),main="Normalized Unscaled Standard Errors (NUSE)", axes = FALSE)
+    if(length(sampleNames(rawData()))<MAXARRAY){
+      cexval <- 0.65
+    }else{
+      cexval <- 0.45
+    }  
+    axis(1,at=1:length(sampleNames(rawData())),las=2,labels=sampleNames(rawData()), cex.axis=cexval)        
+    axis(2, cex.axis=0.7)      
+    if(length(levels(experimentFactor()))>1){ 
+      legend("topright", levels(experimentFactor()), col = legendColors(),
+             fill = legendColors(), cex = 0.7, bg = "white", bty = "o")
+    }
     
-  }, deleteFile = T)
+    mtext("NUSE median value should be < 1.1\n", side=3, font=1, cex=0.7)
+    dev.off()
+    
+    list(src = rawdataNUSE,width = WIDTH,height = HEIGHT,alt = "This is alternate text")
+    
+  })
   
   # Rle plot
   output$rawRle <- renderImage({
     req(input$RLE)
-    Data <- rawData()
-    Data.pset <- rawData.pset()
-    experimentFactor <- experimentFactor() 
-    plotColors <- plotColors()
-    legendColors <- legendColors()
-    WIDTH <- WIDTH 
-    HEIGHT <- HEIGHT
-    POINTSIZE <- POINTSIZE
-    MAXARRAY <- MAXARRAY
-      
-      if(is.null(experimentFactor)) stop("The 'experimentFactor' parameter must be specified")
-      if(is.null(plotColors)) stop("The 'plotColors' parameter must be specified")
-      if(is.null(legendColors)) stop("The 'legendColors' parameter must be specified")
-      
-      if(is.null(Data.pset)) {Data.pset <- fitPLM(Data)}   
-      
-      RawDataRLE <- tempfile(fileext = ".png")
-      png(file = RawDataRLE,width=WIDTH,height=HEIGHT,pointsize=POINTSIZE)   
-      par(oma=c(17,0,0,0), cex.axis=1)  
-      Mbox(Data.pset, col = plotColors, main = "Relative Log Expression (RLE)", axes = FALSE)
-      if(length(sampleNames(Data))<MAXARRAY){
-        cexval <- 0.65
-      }else{
-        cexval <- 0.45
-      }  
-      axis(1,at=1:length(sampleNames(Data)),las=2,labels=sampleNames(Data), cex.axis=cexval)        
-      axis(2, cex.axis=0.7)       	   
-      if(length(levels(experimentFactor))>1){ 
-        legend("topright", levels(experimentFactor), col = legendColors, 
-               fill = legendColors, cex = 0.7, bg = "white", bty = "o")
-      }              
-      mtext("RLE distributions should be centered around 0\n", side=3, font=1, cex=0.7)
-      dev.off()
     
-      list(src = RawDataRLE,
-           width = WIDTH,
-           height = HEIGHT,
-           alt = "This is alternate text")
-  }, deleteFile = T)
+    RawDataRLE <- tempfile(fileext = ".png")
+    png(file = RawDataRLE,width=WIDTH,height=HEIGHT,pointsize=POINTSIZE)   
+    par(oma=c(17,0,0,0), cex.axis=1)  
+    Mbox(rawData.pset(), col = plotColors(), main = "Relative Log Expression (RLE)", axes = FALSE)
+    if(length(sampleNames(rawData()))<MAXARRAY){
+      cexval <- 0.65
+    }else{
+      cexval <- 0.45
+    }  
+    axis(1,at=1:length(sampleNames(rawData())),las=2,labels=sampleNames(rawData()), cex.axis=cexval)        
+    axis(2, cex.axis=0.7)       	   
+    if(length(levels(experimentFactor()))>1){ 
+      legend("topright", levels(experimentFactor()), col = legendColors(), 
+             fill = legendColors(), cex = 0.7, bg = "white", bty = "o")
+    }              
+    mtext("RLE distributions should be centered around 0\n", side=3, font=1, cex=0.7)
+    dev.off()
+    
+    list(src = RawDataRLE,width = WIDTH,height = HEIGHT,alt = "This is alternate text")
+  })
   
   # Corelation plots
-  
   output$correlRaw <- renderImage({
     req(input$correlRaw)
-    Data <- rawData()
     clusterOption1 <- input$clusteroption1
     clusterOption2 <- input$clusteroption2 
     normMeth <- ""
-    experimentFactor <- experimentFactor()
-    legendColors <- legendColors() 
-    WIDTH <- WIDTH
-    HEIGHT <- HEIGHT
-    POINTSIZE <- POINTSIZE
-    MAXARRAY <- MAXARRAY  
     
-    if(is.null(experimentFactor)) stop("the 'exerimentFactor' parameter is required")	
-    if(is.null(legendColors)) stop("the 'legendColors' parameter is required")	
-    
-    if(class(Data) == "AffyBatch") {
+    if(class(rawData()) == "AffyBatch") {
       Type <- "Raw"
       text1 <- "Raw data correlation plot"
     } else {
@@ -1503,12 +1384,12 @@ server <- function(input, output, session) {
       Type <- "Norm"
       text1 <- paste("Array correlation plot\nafter",normMeth,"normalization")
     } 
-    if(length(sampleNames(Data))<2) {
+    if(length(sampleNames(rawData()))<2) {
       warning("Only one array in dataset, no correlation plot made")
     } else {
       rawdataCorrelation <- tempfile(fileext = ".png")
       png(file = rawdataCorrelation,width=WIDTH,height=HEIGHT,pointsize=POINTSIZE)
-      if(length(sampleNames(Data))<MAXARRAY) {
+      if(length(sampleNames(rawData()))<MAXARRAY) {
         par(oma=c(17,0,0,0),cex.axis=0.7,cex.main=0.8)
         #subval <- 10
       } else {
@@ -1520,7 +1401,7 @@ server <- function(input, output, session) {
       #only use euclidean distance to compute the similarity of the correlation vectors for the arrays
       COpt1 <- "pearson"
       if (tolower(clusterOption1) == "spearman") COpt1 <- "spearman"
-      crp <- cor(exprs(Data), use="complete.obs", method=COpt1)
+      crp <- cor(exprs(rawData()), use="complete.obs", method=COpt1)
       
       text1 <- paste(text1,"\ncorrelation method:",COpt1,"\ncluster method:",clusterOption2)
       
@@ -1539,50 +1420,38 @@ server <- function(input, output, session) {
       my.hclust <- function(d) hclust(d, method=clusterOption2)
       
       #in order to create some space to put colored symbols as well
-      #sampleNames(Data) <- paste(sampleNames(Data)," ")
+      #sampleNames(rawData()) <- paste(sampleNames(rawData())," ")
       
-      sideColors <- legendColors[as.numeric(experimentFactor)]
+      sideColors <- legendColors()[as.numeric(experimentFactor())]
       
       heatmap.2(crp, distfun=my.dist, hclustfun=my.hclust, trace="none", symm=TRUE, density.info="density",
                 main=text1, dendrogram="row", ColSideColors=sideColors)
       
-      #correlationPlot(Data)    
-      #axis(1,side=3,at=seq(from=0.5, to=(length(sampleNames(Data)))-0.5,by=1),
-      #    labels=substr(as.character(sampleNames(Data)),1,subval),las=2)
+      #correlationPlot(rawData())    
+      #axis(1,side=3,at=seq(from=0.5, to=(length(sampleNames(rawData())))-0.5,by=1),
+      #    labels=substr(as.character(sampleNames(rawData())),1,subval),las=2)
       #par(srt=0) 
       #plot(c(0,2), type = 'n', ann = FALSE, axes = FALSE, 
       #    frame.plot = FALSE, xlim = c(0, 2), ylim = c(0,2))
       #text(1,1,text1,cex=1)  
       dev.off()
-      list(src = rawdataCorrelation,
-           width = WIDTH,
-           height = HEIGHT,
-           alt = "This is alternate text")
+      list(src = rawdataCorrelation,width = WIDTH,height = HEIGHT,alt = "This is alternate text")
     }
-  },deleteFile = T)
+  })
 
   # PCA raw
   output$PCAraw <- renderImage({
     req(input$PCAraw)
-    Data <- rawData()
-    experimentFactor=experimentFactor()
     normMeth=""
     scaled_pca <- TRUE
-    plotColors <- plotColors()
-    legendColors <- legendColors() 
-    plotSymbols <- plotSymbols() 
-    legendSymbols <- legendSymbols() 
     namesInPlot <- FALSE 
-    WIDTH <- WIDTH
-    HEIGHT <- HEIGHT
-    POINTSIZE <- POINTSIZE
     
     # Scaled PCA by default
-    if(length(sampleNames(Data))<3) {
-      warning("Only",length(sampleNames(Data)),"sample(s) in dataset, no PCA plot made")
+    if(length(sampleNames(rawData()))<3) {
+      warning("Only",length(sampleNames(rawData())),"sample(s) in dataset, no PCA plot made")
     } else { 
       
-      if(class(Data) == "AffyBatch"){
+      if(class(rawData()) == "AffyBatch"){
         #raw data
         tmain <- "PCA analysis of Raw data"
         Type="Raw"	
@@ -1593,9 +1462,9 @@ server <- function(input, output, session) {
       }
       
       pca1 <- NULL  
-      try(pca1 <- prcomp(t(exprs(Data)[apply(exprs(Data),1,function(r) {sum(is.na(r))==0}),]), retx=T, center=T, scale=scaled_pca),TRUE)
+      try(pca1 <- prcomp(t(exprs(rawData())[apply(exprs(rawData()),1,function(r) {sum(is.na(r))==0}),]), retx=T, center=T, scale=scaled_pca),TRUE)
       if(is.null(pca1) & scaled_pca) {
-        try(pca1 <- prcomp(t(exprs(Data)[apply(exprs(Data),1,function(r) {sum(is.na(r))==0}),]), retx=T, center=T, scale=FALSE),TRUE)
+        try(pca1 <- prcomp(t(exprs(rawData())[apply(exprs(rawData()),1,function(r) {sum(is.na(r))==0}),]), retx=T, center=T, scale=FALSE),TRUE)
         if(!is.null(pca1)) warning("pca with scaling unsuccessful, successfully retried without scaling")
       }
       if(!is.null(pca1)) {
@@ -1616,48 +1485,45 @@ server <- function(input, output, session) {
           layout(rbind(c(1,1,2,2),c(1,1,2,2),c(3,3,4,4),c(3,3,4,4)))
         }
         par(oma=c(20,0,5,0))
-        plot(pca1$x[,1],pca1$x[,2],cex=cex.circle,pch=plotSymbols,
-             col=plotColors,xlab=paste("PC1 (",perc_expl1[1],"%)",sep=""),
+        plot(pca1$x[,1],pca1$x[,2],cex=cex.circle,pch=plotSymbols(),
+             col=plotColors(),xlab=paste("PC1 (",perc_expl1[1],"%)",sep=""),
              ylab=paste("PC2 (",perc_expl1[2],"%)",sep=""))
-        if(namesInPlot) text(pca1$x[,1],pca1$x[,2], sampleNames(Data),pos=4,cex=cex.text,col=tcol) 
-        plot(pca1$x[,1],pca1$x[,3],cex=cex.circle,pch=plotSymbols,
-             col=plotColors,xlab=paste("PC1 (",perc_expl1[1],"%)",sep=""),
+        if(namesInPlot) text(pca1$x[,1],pca1$x[,2], sampleNames(rawData()),pos=4,cex=cex.text,col=tcol) 
+        plot(pca1$x[,1],pca1$x[,3],cex=cex.circle,pch=plotSymbols(),
+             col=plotColors(),xlab=paste("PC1 (",perc_expl1[1],"%)",sep=""),
              ylab=paste("PC3 (",perc_expl1[3],"%)",sep=""))
-        if(namesInPlot) text(pca1$x[,1],pca1$x[,3], sampleNames(Data),pos=4,cex=cex.text,col=tcol)
-        plot(pca1$x[,2],pca1$x[,3],cex=cex.circle,pch=plotSymbols,
-             col=plotColors,xlab=paste("PC2 (",perc_expl1[2],"%)",sep=""),
+        if(namesInPlot) text(pca1$x[,1],pca1$x[,3], sampleNames(rawData()),pos=4,cex=cex.text,col=tcol)
+        plot(pca1$x[,2],pca1$x[,3],cex=cex.circle,pch=plotSymbols(),
+             col=plotColors(),xlab=paste("PC2 (",perc_expl1[2],"%)",sep=""),
              ylab=paste("PC3 (",perc_expl1[3],"%)",sep=""))
-        if(namesInPlot) text(pca1$x[,2],pca1$x[,3], sampleNames(Data),pos=4,cex=cex.text,col=tcol)
+        if(namesInPlot) text(pca1$x[,2],pca1$x[,3], sampleNames(rawData()),pos=4,cex=cex.text,col=tcol)
         barplot((100*pca1$sdev^2)/sum(pca1$sdev^2),xlab="components",ylab="% of total variance explained")
         
         if(namesInPlot) {
-          if(length(levels(experimentFactor))>1){ 
-            legend("topright",levels(experimentFactor),
-                   pch=legendSymbols,col=legendColors,cex=cex.legend)
+          if(length(levels(experimentFactor()))>1){ 
+            legend("topright",levels(experimentFactor()),
+                   pch=legendSymbols(),col=legendColors(),cex=cex.legend)
           }
         } else {
           par(mar=c(0,0,0,0))	
           plot(1,type="n",xaxt="n",yaxt="n",xlab="",ylab="",bty="n")
-          if(length(levels(experimentFactor))>1) {
-            legend("topleft",c(levels(experimentFactor),"",sampleNames(Data)),
-                   #             pch=c(rep(20,length(unique(experimentFactor))+1),plotSymbols,
-                   pch=c(legendSymbols,20,plotSymbols),
-                   col=c(legendColors,"white",plotColors),cex=(cex.legend+0.1)
-                   #             ,fill=c(legendColors,rep("white",length(experimentFactor)+1)),
-                   #             border=c(legendColors,rep("white",length(experimentFactor)+1))
+          if(length(levels(experimentFactor()))>1) {
+            legend("topleft",c(levels(experimentFactor()),"",sampleNames(rawData())),
+                   #             pch=c(rep(20,length(unique(experimentFactor()))+1),plotSymbols(),
+                   pch=c(legendSymbols(),20,plotSymbols()),
+                   col=c(legendColors(),"white",plotColors()),cex=(cex.legend+0.1)
+                   #             ,fill=c(legendColors(),rep("white",length(experimentFactor())+1)),
+                   #             border=c(legendColors(),rep("white",length(experimentFactor())+1))
             )
           } else {
-            legend("topleft",sampleNames(Data),pch=plotSymbols,
-                   col=plotColors,cex=0.7, bty = "n")
+            legend("topleft",sampleNames(rawData()),pch=plotSymbols(),
+                   col=plotColors(),cex=0.7, bty = "n")
           }
         }
         
         mtext(tmain, side = 3, outer = TRUE, font = 2, cex = 1.2)
         dev.off()
-        list(src = rawdataPCAanalysis,
-             width = WIDTH,
-             height = HEIGHT,
-             alt = "This is alternate text")
+        list(src = rawdataPCAanalysis,width = WIDTH,height = HEIGHT,alt = "This is alternate text")
       }
     }
   })
@@ -1665,20 +1531,10 @@ server <- function(input, output, session) {
   # Hierarchical clustering
   output$clusterRaw <- renderImage({
     req(input$clusterRaw)
-    Data <- rawData()
-    experimentFactor <- experimentFactor()
     clusterOption1 <- input$clusteroption1
     clusterOption2 <- input$clusteroption2
-    plotColors <- plotColors()
-    legendColors <- legendColors()
-    plotSymbols <- plotSymbols()
-    legendSymbols <- legendSymbols()
-    WIDTH <- WIDTH
-    HEIGHT <- HEIGHT
-    POINTSIZE <- POINTSIZE
-    MAXARRAY <- MAXARRAY
     
-    if(class(Data)=="AffyBatch") {
+    if(class(rawData())=="AffyBatch") {
       Type <- "Raw"
       main <- "Cluster dendrogram of raw data"
     } else {
@@ -1686,18 +1542,18 @@ server <- function(input, output, session) {
       Type <- "Norm"
       main <- paste("Cluster dendrogram of",normMeth,"normalized data")
     }  
-    if(length(sampleNames(Data))<3) {
-      warning("Only ",length(sampleNames(Data))," sample(s) in dataset, no clustering plot made")
+    if(length(sampleNames(rawData()))<3) {
+      warning("Only ",length(sampleNames(rawData()))," sample(s) in dataset, no clustering plot made")
     } else {  
       switch(tolower(clusterOption1), 
              "pearson" = {
-               correl <- cor.dist(t(exprs(Data)),abs=FALSE)
+               correl <- cor.dist(t(exprs(rawData())),abs=FALSE)
              },
              "spearman" = {
-               correl <- spearman.dist(t(exprs(Data)),abs=FALSE)
+               correl <- spearman.dist(t(exprs(rawData())),abs=FALSE)
              },
              "euclidean" = {
-               correl <- euc(t(exprs(Data)))
+               correl <- euc(t(exprs(rawData())))
              }
       )
       if(tolower(clusterOption2)!="ward.d2" & tolower(clusterOption2)!="ward.d") {
@@ -1711,7 +1567,7 @@ server <- function(input, output, session) {
       }
       rawClustering <- tempfile(fileext = ".png")
       png(file = rawClustering,width=WIDTH,height=HEIGHT,pointsize=POINTSIZE)
-      if(length(sampleNames(Data))<MAXARRAY) {
+      if(length(sampleNames(rawData()))<MAXARRAY) {
         cexval1 <- 0.75
         cexval2 <- 1.23
         cexval3 <- 0.55
@@ -1724,18 +1580,15 @@ server <- function(input, output, session) {
       par(cex.axis=cexval2,cex.lab=cexval2,cex.main=cexval2)	       
       plot(clust, hang=-1, main=main, xlab=paste("distance:",clusterOption1), sub=paste(" cluster method:",clusterOption2))
       points(1:length(clust$order),rep(0,length(clust$order)),pch=15,col="white",cex=1.5)
-      points(1:length(clust$order),rep(0,length(clust$order)),pch=plotSymbols[clust$order],col=plotColors[clust$order])
-      if(length(levels(experimentFactor))>1) { 
-        legend("topright",levels(experimentFactor),
-               pch=legendSymbols,col=legendColors)
+      points(1:length(clust$order),rep(0,length(clust$order)),pch=plotSymbols()[clust$order],col=plotColors()[clust$order])
+      if(length(levels(experimentFactor()))>1) { 
+        legend("topright",levels(experimentFactor()),
+               pch=legendSymbols(),col=legendColors())
       }
       par(cex=cexval3)    
       dev.off()
       
-      list(src = rawClustering,
-           width = WIDTH,
-           height = HEIGHT,
-           alt = "This is alternate text")
+      list(src = rawClustering,width = WIDTH,height = HEIGHT,alt = "This is alternate text")
     }
   })
   
@@ -1970,7 +1823,7 @@ server <- function(input, output, session) {
   output$normdatatable <- renderTable({
     req(normDataTable())
     head(normDataTable(), 20)
-  },deleteFile = T)
+  })
   
   # Normalized boxplot and density plots
   output$boxplotNorm <- renderImage({
@@ -2005,7 +1858,7 @@ server <- function(input, output, session) {
          width = WIDTH,
          height = HEIGHT,
          alt = "This is alternate text")
-  },deleteFile = T)
+  })
   
   output$densityNorm <- renderImage({
     req(input$densityNorm)
@@ -2040,7 +1893,7 @@ server <- function(input, output, session) {
          width = WIDTH,
          height = HEIGHT,
          alt = "This is alternate text")
-  },deleteFile = T)
+  })
   
   output$correlNorm <- renderImage({
     req(input$correlNorm)
@@ -2099,7 +1952,7 @@ server <- function(input, output, session) {
            height = HEIGHT,
            alt = "This is alternate text")
     }
-  },deleteFile = T)
+  })
   
   output$PCAnorm <- renderImage({
     req(input$PCAnorm)
@@ -2183,7 +2036,7 @@ server <- function(input, output, session) {
              alt = "This is alternate text")
       }
     }
-  },deleteFile = T)
+  })
   
   output$clusterNorm <- renderImage({
     req(input$clusterNorm)
@@ -2246,7 +2099,7 @@ server <- function(input, output, session) {
            height = HEIGHT,
            alt = "This is alternate text")
     }
-  },deleteFile = T)
+  })
   
   
   ##### DE ANALYSIS #####
