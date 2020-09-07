@@ -128,10 +128,18 @@ navbarPage(theme = shinytheme("flatly"),
                     sidebarPanel(
                       width = 2,
                       selectInput(inputId = "normMeth", label = "Normalization method", choices = c("RMA","GCRMA","PLIER","none")),
-                      selectInput(inputId = "species",label = "Species",choices = c("Anopheles gambiae","Arabidopsis thaliana","Bos taurus","Caenorhabditis elegans","Canis familiaris", "Danio rerio","Drosophila melanogaster","Gallus gallus","Homo sapiens","Macaca mulatta","Mus musculus", "Oryza sativa","Rattus norvegicus","Saccharomyces cerevisiae","Schizosaccharomyces pombe","Sus scrofa"), selected = "Homo sapiens"),
-                      checkboxInput(inputId = "customCDF", label = "Custom annotation file (CDF)", value = FALSE),
-                      selectInput(inputId = "CDFtype",label = "Annotation format",choices = c("ENTREZG","REFSEQ","ENSG","ENSE","ENST","VEGAG","VEGAE","VEGAT","TAIRG","TAIRT","UG","MIRBASEF","MIRBASEG")),
                       selectInput(inputId = "perGroup", label = "Normalization per experimental group or using all arrays", choices = c("dataset","group")),
+                      selectInput(inputId = "annotations",label = "Annotations",choices = c("No annotations","Custom annotations","Upload annotation file")),
+                      conditionalPanel(
+                        condition = "input.annotations=='Custom annotations'",
+                        checkboxInput(inputId = "customCDF", label = "Custom annotation file (CDF)", value = T),
+                        selectInput(inputId = "species",label = "Species",choices = c("Anopheles gambiae","Arabidopsis thaliana","Bos taurus","Caenorhabditis elegans","Canis familiaris", "Danio rerio","Drosophila melanogaster","Gallus gallus","Homo sapiens","Macaca mulatta","Mus musculus", "Oryza sativa","Rattus norvegicus","Saccharomyces cerevisiae","Schizosaccharomyces pombe","Sus scrofa"), selected = "Homo sapiens"),
+                        selectInput(inputId = "CDFtype",label = "Annotation format",choices = c("ENTREZG","REFSEQ","ENSG","ENSE","ENST","VEGAG","VEGAE","VEGAT","TAIRG","TAIRT","UG","MIRBASEF","MIRBASEG")),
+                      ),
+                      conditionalPanel(
+                        condition = "input.annotations=='Upload annotation file'",
+                        fileInput(inputId = "annot_file",label = "Upload annotation file",multiple = FALSE)
+                      ),
                       actionButton(inputId = "preprocessing",label = "Run preprocessing", icon = icon("refresh")),
                       tags$br(),
                       tags$br(),
@@ -187,8 +195,8 @@ navbarPage(theme = shinytheme("flatly"),
                  # width = 2,
                   uiOutput("contrasts"),
                   tags$b("Draw histograms"),
-                  checkboxInput(inputId = "pvalHist", label = "Plot P-Value histogram for each comparison", value = FALSE),
-                  checkboxInput(inputId = "logFCHist", label = "Plot adapted Fold Change historams for each comparison", value = FALSE),
+                  #checkboxInput(inputId = "pvalHist", label = "Plot P-Value histogram for each comparison", value = FALSE),
+                  #checkboxInput(inputId = "logFCHist", label = "Plot adapted Fold Change historams for each comparison", value = FALSE),
                   actionButton(inputId = "startStat",label = "Calculate statistics",icon = icon("refresh")),
                   tags$br(),
                   tags$br(),
@@ -197,8 +205,6 @@ navbarPage(theme = shinytheme("flatly"),
                 ),
                 mainPanel(
                   uiOutput("statOutput"),
-                  #plotOutput("pValhist",height = "100%", width = "100%"),
-                  #plotOutput("logFChist",height = "100%", width = "100%")
                 )
               )
              ),
@@ -236,6 +242,15 @@ navbarPage(theme = shinytheme("flatly"),
              tabPanel("Network Analysis",
                       sidebarLayout(
                         sidebarPanel(),
+                        mainPanel()
+                      )
+                      ),
+             tabPanel("Downloads",
+                      sidebarLayout(
+                        sidebarPanel(
+                          checkboxInput(inputId = "rawQCplot_download", label = "Download all selected plots", value = T),
+                          checkboxInput(inputId = "Normtable_download", label = "Download all generated tables", value = T)
+                        ),
                         mainPanel()
                       )
                       )
