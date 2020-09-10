@@ -367,7 +367,6 @@ server <- function(input, output, session) {
   # 3'5' Ratio plot beta actin
   output$ratioplot<-renderImage({
     req(input$ratioplot)
-    Data <- rawData()
     experimentFactor <- experimentFactor()
     plotColors <- plotColors()
     legendColors <- legendColors()
@@ -408,8 +407,8 @@ server <- function(input, output, session) {
       title(main= paste("RNA degradation of", Cname),ylab="3'/5' and 3'/M ratios")    
       axis(2)
       par(cex.axis=0.65)
-      if(length(sampleNames(Data))<(MAXARRAY/2)){ # array names not reported if more than 20 arrays
-        axis(1,at=1:length(ratio35),las=2,labels=sampleNames(Data))
+      if(length(sampleNames(rawData()))<(MAXARRAY/2)){ # array names not reported if more than 20 arrays
+        axis(1,at=1:length(ratio35),las=2,labels=sampleNames(rawData()))
       }
       if(length(levels(experimentFactor))>1){
         legend("topright", levels(experimentFactor),
@@ -419,9 +418,9 @@ server <- function(input, output, session) {
                                 sep=""), paste("3'/M ratio (max=", round(max(ratioM),2),")",sep="")),
              col = c(gray(0.3),"black"),pch=symbol, cex=0.55, bty = "o")
       t1 <- ratio35 <= cutoff	
-      if(length(t1[t1==FALSE])>0 && length(sampleNames(Data))>=(MAXARRAY/2)){
+      if(length(t1[t1==FALSE])>0 && length(sampleNames(rawData()))>=(MAXARRAY/2)){
         if(length(t1[t1==FALSE])<25){
-          textlab<-sampleNames(Data)[t1==FALSE]
+          textlab<-sampleNames(rawData())[t1==FALSE]
           legend("topleft", c(rep("",4),"Outliers, from left to right",textlab), 
                  text.col = c(rep(1,5), rep("red",length(textlab))), bty = "n",cex=0.38)  
         }else{
@@ -498,8 +497,8 @@ server <- function(input, output, session) {
       title(main= paste("RNA degradation of", Cname),ylab="3'/5' and 3'/M ratios")    
       axis(2)
       par(cex.axis=0.65)
-      if(length(sampleNames(Data))<(MAXARRAY/2)){ # array names not reported if more than 20 arrays
-        axis(1,at=1:length(ratio35),las=2,labels=sampleNames(Data))
+      if(length(sampleNames(rawData()))<(MAXARRAY/2)){ # array names not reported if more than 20 arrays
+        axis(1,at=1:length(ratio35),las=2,labels=sampleNames(rawData()))
       }
       if(length(levels(experimentFactor))>1){
         legend("topright", levels(experimentFactor),
@@ -509,9 +508,9 @@ server <- function(input, output, session) {
                                 sep=""), paste("3'/M ratio (max=", round(max(ratioM),2),")",sep="")),
              col = c(gray(0.3),"black"),pch=symbol, cex=0.55, bty = "o")
       t1 <- ratio35 <= cutoff	
-      if(length(t1[t1==FALSE])>0 && length(sampleNames(Data))>=(MAXARRAY/2)){
+      if(length(t1[t1==FALSE])>0 && length(sampleNames(rawData()))>=(MAXARRAY/2)){
         if(length(t1[t1==FALSE])<25){
-          textlab<-sampleNames(Data)[t1==FALSE]
+          textlab<-sampleNames(rawData())[t1==FALSE]
           legend("topleft", c(rep("",4),"Outliers, from left to right",textlab), 
                  text.col = c(rep(1,5), rep("red",length(textlab))), bty = "n",cex=0.38)  
         }else{
@@ -548,7 +547,6 @@ server <- function(input, output, session) {
   # RNA degradation plot
   output$rnadegplot<- renderImage({
     req(input$rnadegplot)
-    Data <- rawData()
     Data.rnadeg=NULL
     
     RawDataRNAdegradation <- tempfile(fileext='.png')
