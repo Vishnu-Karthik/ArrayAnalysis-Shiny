@@ -1,9 +1,0 @@
-ArrayDataFile	SourceName	FactorValue
-GSM286765.CEL.gz	t_24h_rep1	treated_24h
-GSM286759.CEL.gz	t_12h_rep1	treated_12h
-GSM286763.CEL.gz	c_24h_rep2	control_24h
-GSM286760.CEL.gz	t_12h_rep2	treated_12h
-GSM286757.CEL.gz	c_12h_rep2	control_12h
-GSM286766.CEL.gz	t_24h_rep2	treated_24h
-GSM286756.CEL.gz	c_12h_rep1	control_12h
-GSM286762.CEL.gz	c_24h_rep1	control_24h

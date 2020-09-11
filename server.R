@@ -211,7 +211,7 @@ server <- function(input, output, session) {
   # Fit a probe level model if a plot requires it
   rawData.pset <- reactive({
     rawData.pset <- NULL
-    req(input$Nuse || input$RLE)
+    req(input$spatialimages || input$PLMimage || input$Nuse || input$RLE)
     rawData.pset <- fitPLM(rawData())                     
   })
 
@@ -367,6 +367,9 @@ server <- function(input, output, session) {
   # 3'5' Ratio plot beta actin
   output$ratioplot<-renderImage({
     req(input$ratioplot)
+    experimentFactor <- experimentFactor()
+    plotColors <- plotColors()
+    legendColors <- legendColors()
     quality<- quality()
     #par(parStart)
     
@@ -393,10 +396,10 @@ server <- function(input, output, session) {
       
       par(new=TRUE)
       plot(ratio35, type='h', ann=FALSE, axes=FALSE, 
-           frame.plot=TRUE, lwd=3, col=plotColors(), ylim=c(cMin,cMax))
+           frame.plot=TRUE, lwd=3, col=plotColors, ylim=c(cMin,cMax))
       par(new=TRUE)
       plot(ratio35,type='p', ann=FALSE, axes=FALSE, 
-           frame.plot=TRUE, pch=symbol[1], col=plotColors(), ylim=c(cMin,cMax))
+           frame.plot=TRUE, pch=symbol[1], col=plotColors, ylim=c(cMin,cMax))
       par(new=TRUE)
       plot(ratioM,type='p', ann=FALSE, axes=FALSE, 
            frame.plot=TRUE, pch=symbol[2], col="black", ylim=c(cMin,cMax))           
@@ -407,9 +410,9 @@ server <- function(input, output, session) {
       if(length(sampleNames(rawData()))<(MAXARRAY/2)){ # array names not reported if more than 20 arrays
         axis(1,at=1:length(ratio35),las=2,labels=sampleNames(rawData()))
       }
-      if(length(levels(experimentFactor()))>1){
-        legend("topright", levels(experimentFactor()),
-               col = legendColors(), fill = legendColors(), bty = "n",cex = 0.55)
+      if(length(levels(experimentFactor))>1){
+        legend("topright", levels(experimentFactor),
+               col = legendColors, fill = legendColors, bty = "n",cex = 0.55)
       }
       legend("topleft", c(paste("3\'/5\' ratio (max=", round(max(ratio35),2),")",
                                 sep=""), paste("3'/M ratio (max=", round(max(ratioM),2),")",sep="")),
@@ -455,6 +458,8 @@ server <- function(input, output, session) {
   # 3'5' Ratio plot GADPH
   output$ratioplot2<-renderImage({
     req(input$ratioplot)
+    experimentFactor<-experimentFactor()
+    legendColors<-legendColors()
     quality<-quality()
     #par(parStart)
     
@@ -481,10 +486,10 @@ server <- function(input, output, session) {
       
       par(new=TRUE)
       plot(ratio35, type='h', ann=FALSE, axes=FALSE, 
-           frame.plot=TRUE, lwd=3, col=plotColors(), ylim=c(cMin,cMax))
+           frame.plot=TRUE, lwd=3, col=plotColors, ylim=c(cMin,cMax))
       par(new=TRUE)
       plot(ratio35,type='p', ann=FALSE, axes=FALSE, 
-           frame.plot=TRUE, pch=symbol[1], col=plotColors(), ylim=c(cMin,cMax))
+           frame.plot=TRUE, pch=symbol[1], col=plotColors, ylim=c(cMin,cMax))
       par(new=TRUE)
       plot(ratioM,type='p', ann=FALSE, axes=FALSE, 
            frame.plot=TRUE, pch=symbol[2], col="black", ylim=c(cMin,cMax))           
@@ -495,9 +500,9 @@ server <- function(input, output, session) {
       if(length(sampleNames(rawData()))<(MAXARRAY/2)){ # array names not reported if more than 20 arrays
         axis(1,at=1:length(ratio35),las=2,labels=sampleNames(rawData()))
       }
-      if(length(levels(experimentFactor()))>1){
-        legend("topright", levels(experimentFactor()),
-               col = legendColors(), fill = legendColors(), bty = "n",cex = 0.55)
+      if(length(levels(experimentFactor))>1){
+        legend("topright", levels(experimentFactor),
+               col = legendColors, fill = legendColors, bty = "n",cex = 0.55)
       }
       legend("topleft", c(paste("3\'/5\' ratio (max=", round(max(ratio35),2),")",
                                 sep=""), paste("3'/M ratio (max=", round(max(ratioM),2),")",sep="")),
@@ -731,7 +736,7 @@ server <- function(input, output, session) {
     
     if(length(levels(experimentFactor()))>1){
       legend("topright", levels(experimentFactor()),
-             col = legendColors(), fill = legendColors(), cex = 0.55, bty = "n")
+             col = legendColorsr(), fill = legendColorsr(), cex = 0.55, bty = "n")
     }
     
     legend("bottomright", c(paste("min = ", round(ppMin,2), sep="" ), 
@@ -1586,37 +1591,6 @@ server <- function(input, output, session) {
   })
   
   ##### PREPROCESSING #####
-  # Upload CDF
-  uploadcdfenv <- function(Data,cdf_filename,cdf_path){
-    #spp <- c("Ag","At","Bt","Ce","Cf","Dr","Dm","Gg","Hs","MAmu","Mm","Os","Rn",
-    #         "Sc","Sp","Ss")
-    #names(spp) <- c("Anopheles gambiae","Arabidopsis thaliana","Bos taurus",
-    #                "Caenorhabditis elegans","Canis familiaris", "Danio rerio",
-    #                "Drosophila melanogaster","Gallus gallus","Homo sapiens",
-    #                "Macaca mulatta","Mus musculus", "Oryza sativa","Rattus norvegicus",
-    #                "Saccharomyces cerevisiae","Schizosaccharomyces pombe","Sus scrofa")
-    
-    #species <- spp[tolower(names(spp))==tolower(species)]
-    
-    #initial value
-    CDFenv <- 0
-    
-    # recall which cdfName was added, in case no updated one is found (set back
-    # even if it does not exist)
-    presetCDF <- Data@cdfName
-    
-    #try without a version number
-    suppressWarnings(try(CDFenv <- make.cdf.env(filename = cdf_filename,cdf.path=cdf_path,compress=FALSE,verbose = f),TRUE)) 
-    
-    if ((class(CDFenv)!="environment")) {
-      Data@cdfName <- presetCDF
-      warning("Could not load custom CDF environment for this chip type - object kept as is")
-    }
-    
-    cat("current cdf environment loaded:",Data@cdfName,"\n")
-    return(Data)
-  }
-  
   # Custom CD env
   addUpdatedCDFenv <- function(Data, species=NULL, type="ENSG") {
     # note: this function will add an updated cdf environment to the data object
@@ -1644,6 +1618,8 @@ server <- function(input, output, session) {
     # recall which cdfName was added, in case no updated one is found (set back
     # even if it does not exist)
     presetCDF <- Data@cdfName
+    
+    print(c(species,type))
     
     #try to find updated cdf file of choice
     print(Data@cdfName<-paste(Data@annotation,species,type,sep="_"))
@@ -1679,13 +1655,13 @@ server <- function(input, output, session) {
   normData <- eventReactive(eventExpr = input$preprocessing, {
     Data <- rawData()
     normMeth <- input$normMeth
+    aType <- aType()
+    customCDF <- input$customCDF
+    experimentFactor <- experimentFactor()
+    WIDTH <- WIDTH
+    HEIGHT <- HEIGHT
     CDFtype <- input$CDFtype
     species <- input$species
-    customCDF <- FALSE
-    
-    if(input$annotations=="Custom annotations"){
-      customCDF <- TRUE
-    } 
     
     if(input$perGroup == "group"){
       perGroup <- TRUE
@@ -1704,7 +1680,7 @@ server <- function(input, output, session) {
     
     nGroups <- 1
     if(perGroup) {
-      nGroups <- max(1,length(levels(experimentFactor())))
+      nGroups <- max(1,length(levels(experimentFactor)))
       if(nGroups==1) warning("normalization per group requested, but no groups indicated in data set")
     }
     
@@ -1720,7 +1696,7 @@ server <- function(input, output, session) {
       if(nGroups==1) {
         Data.tmp <- Data.copy
       } else {
-        Data.tmp <- Data.copy[,experimentFactor()==(levels(experimentFactor())[group])]
+        Data.tmp <- Data.copy[,experimentFactor==(levels(experimentFactor)[group])]
       }
       switch(normMeth, 
              "MAS5" = {
@@ -1736,16 +1712,16 @@ server <- function(input, output, session) {
                    install.packages(probeLibrary, repos="http://brainarray.mbni.med.umich.edu/bioc")
                  }
                }
-               if(aType() == "PMMM") ntype = "fullmodel"
-               if(aType() == "PMonly") ntype = "affinities" # good results if most of the genes are not expressed
+               if(aType == "PMMM") ntype = "fullmodel"
+               if(aType == "PMonly") ntype = "affinities" # good results if most of the genes are not expressed
                normData.tmp <- gcrma(Data.tmp, type=ntype, fast = FALSE)
              },
              "RMA" = {
                normData.tmp <- rma(Data.tmp)
              },
              "PLIER" = {
-               if(aType() == "PMMM") ntype = "together"
-               if(aType() == "PMonly") ntype = "pmonly"
+               if(aType == "PMMM") ntype = "together"
+               if(aType == "PMonly") ntype = "pmonly"
                normData.tmp <- justPlier(Data.tmp, normalize=TRUE, norm.type = ntype)
              }
       )
@@ -1860,7 +1836,7 @@ server <- function(input, output, session) {
     png(file = normBoxplot,width=WIDTH,height=HEIGHT, pointsize=POINTSIZE)  
     par(oma=c(17,0,0,0), cex.axis=1) 
     suppressWarnings(boxplot(normData(), col=plotColors() ,main=tmain, axes=FALSE, pch = 20, cex=0.7))
-    if(length(levels(experimentFactor()))>1){ 
+    if(length(levels(experimentFactor))>1){ 
       legend("topright", levels(experimentFactor()),
              col=legendColors(),fill=legendColors(), cex = 0.7, bg = "white", bty = "o")
     }
