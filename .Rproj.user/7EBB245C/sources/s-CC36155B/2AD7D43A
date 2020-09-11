@@ -1,0 +1,26 @@
+{
+    "collab_server" : "",
+    "contents" : "",
+    "created" : 1589475130846.000,
+    "dirty" : false,
+    "encoding" : "UTF-8",
+    "folds" : "125|30|129|4|\n130|33|134|4|\n135|34|246|2|\n247|33|348|2|\n349|34|450|2|\n451|35|485|2|\n486|31|575|2|\n576|38|682|2|\n683|38|695|2|\n696|43|820|2|\n821|36|929|2|\n930|32|976|2|\n977|41|1012|2|\n",
+    "hash" : "2834059469",
+    "id" : "2AD7D43A",
+    "lastKnownWriteTime" : 1589985875,
+    "last_content_update" : 1589985875360,
+    "path" : "~/projects/msc/sem4/shinyapp/server.R",
+    "project_path" : "server.R",
+    "properties" : {
+        "cursorPosition" : "456,5",
+        "marks" : "<:0,0\n>:0,0",
+        "scrollLine" : "457"
+    },
+    "read_only" : false,
+    "read_only_alternatives" : [
+    ],
+    "relative_order" : 6,
+    "source_on_save" : false,
+    "source_window" : "",
+    "type" : "r_source"
+}
