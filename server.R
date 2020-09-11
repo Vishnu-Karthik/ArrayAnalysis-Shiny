@@ -15,7 +15,8 @@ package_list <- c("affy",
                   "limma",
                   "clusterProfiler",
                   "org.Hs.eg.db",
-                  "ArrayTools")
+                  "ArrayTools",
+                  "makecdfenv")
 lapply(package_list, require, character.only = TRUE)
 
 options(shiny.maxRequestSize = 3000*1024^2)
