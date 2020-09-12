@@ -116,7 +116,6 @@ server <- function(input, output, session) {
   })
   
   ##### PREREQUISITES FOR QC PLOTS #####
-  
   # Get the array type
   aType <- reactive({
     Data <- rawData()
@@ -1770,10 +1769,14 @@ server <- function(input, output, session) {
   
   # Normalized data table
   normDataTable <- eventReactive(eventExpr = input$preprocessing, {
-    customCDF <- input$customCDF
     species <- input$species
     CDFtype <- input$CDFtype
     normData <- normData()
+    
+    customCDF <- FALSE
+    if(input$annotations=="Custom annotations"){
+      customCDF <- TRUE
+    } 
     
     if(is.null(customCDF)) stop("The customCDF parameter must be provided")
     if(customCDF) {
