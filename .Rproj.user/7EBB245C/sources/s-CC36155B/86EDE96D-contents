@@ -1,0 +1,60 @@
+library(shiny)
+library(shinythemes)
+
+fluidPage(
+  title = "Title",
+  theme = shinytheme("flatly"),
+  titlePanel("Input Data"),
+  sidebarLayout(
+    sidebarPanel(
+      fileInput(inputId = "DESCFILE", 
+                label = "Select a description file:", 
+                buttonLabel = "Upload", 
+                accept = c("text/csv","text/comma-separated-values,text/plain",".csv",".xls",".xlsx")
+      ),
+      checkboxInput("HEADER", "Header", TRUE),
+      radioButtons(inputId =  "SEP",
+                   label = "Separator", 
+                   choices = c(Comma = ",", Semicolon = ";", Tab = "\t"), 
+                   selected = "\t"
+      ),
+      radioButtons(inputId = "QUOTE",
+                   label = "Quote", 
+                   choices = c(None = "", "Double Quote" = '"', "Single Quote" = "'")
+      ),
+      tags$hr(),
+      fileInput(inputId = "RAWDATA_UPLOAD", 
+        label = "Select the files to upload:", 
+        multiple = TRUE
+      ),
+      actionButton(inputId = "DATA_UPLOAD",
+                   label = "Submit", 
+                   icon = icon("refresh")
+      ),
+      tags$hr(),
+      tags$h2("Select plots to render"),
+      checkboxInput("sampleprep", "Sample Prep Controls", FALSE),
+      checkboxInput("ratioplot", "3'/5' Ratios", FALSE),
+      checkboxInput("rnadegplot", "RNA degradation", FALSE),
+    ),
+    mainPanel(
+      tags$style(type="text/css",
+                 ".shiny-output-error { visibility: hidden; }",
+                 ".shiny-output-error:before { visibility: hidden; }"
+      ),
+      tableOutput("desc"),
+      tableOutput("rawdata"),
+      plotOutput("sampleprep"),
+      plotOutput("ratioplot"),
+      plotOutput("ratioplot2"),
+      plotOutput("rnadegplot"),
+      plotOutput("spikein"),
+      plotOutput("percentpresent"),
+      plotOutput("posnegcontrols"),
+      plotOutput("backgroundintensity"),
+      plotOutput("scalefactors"),
+      plotOutput("boxplots"),
+      plotOutput("densityhistograms"),
+    )
+  )
+)

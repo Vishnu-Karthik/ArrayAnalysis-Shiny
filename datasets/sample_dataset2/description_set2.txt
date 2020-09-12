@@ -1,0 +1,11 @@
+ArrayDataFile	SourceName	FactorValue
+GSM658296.CEL	control5	control
+GSM658295.CEL	control4	control
+GSM658294.CEL	control3	control
+GSM658293.CEL	control2	control
+GSM658292.CEL	control1	control
+GSM658291.CEL	patient5	patient
+GSM658290.CEL	patient4	patient
+GSM658289.CEL	patient3	patient
+GSM658288.CEL	patient2	patient
+GSM658287.CEL	patient1	patient

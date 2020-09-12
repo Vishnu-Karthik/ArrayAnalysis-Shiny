@@ -1,0 +1,25 @@
+{
+    "collab_server" : "",
+    "contents" : "",
+    "created" : 1589899799035.000,
+    "dirty" : false,
+    "encoding" : "UTF-8",
+    "folds" : "144|79|190|0|\n200|52|204|0|\n209|32|213|0|\n218|13|222|0|\n",
+    "hash" : "2672139868",
+    "id" : "32678663",
+    "lastKnownWriteTime" : 1589593355,
+    "last_content_update" : 1589899839963,
+    "path" : "~/projects/msc/sem4/shinyapp/run_affyAnalysisQC.R",
+    "project_path" : "run_affyAnalysisQC.R",
+    "properties" : {
+        "cursorPosition" : "60,20",
+        "scrollLine" : "53"
+    },
+    "read_only" : false,
+    "read_only_alternatives" : [
+    ],
+    "relative_order" : 1,
+    "source_on_save" : false,
+    "source_window" : "",
+    "type" : "r_source"
+}

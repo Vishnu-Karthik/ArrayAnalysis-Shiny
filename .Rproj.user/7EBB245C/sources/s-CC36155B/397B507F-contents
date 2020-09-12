@@ -1,0 +1,15 @@
+library(shiny)
+ui <- fluidPage(
+  checkboxInput("somevalue", "Some value", FALSE),
+  verbatimTextOutput("value")
+)
+server <- function(input, output) {
+  output$value <- renderText({ input$somevalue })
+  output$value <- renderText({ 
+    if(isFALSE(input$somevalue))
+      return(NULL)
+    print("s")
+    })
+}
+shinyApp(ui, server)
+

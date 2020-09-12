@@ -1,0 +1,26 @@
+{
+    "collab_server" : "",
+    "contents" : "",
+    "created" : 1589898789843.000,
+    "dirty" : false,
+    "encoding" : "UTF-8",
+    "folds" : "",
+    "hash" : "3592714944",
+    "id" : "57C011B8",
+    "lastKnownWriteTime" : 1589898542,
+    "last_content_update" : 1589898542,
+    "path" : "~/projects/msc/sem4/shinyapp/ui.R",
+    "project_path" : "ui.R",
+    "properties" : {
+        "cursorPosition" : "50,23",
+        "marks" : "<:55,0\n>:55,0",
+        "scrollLine" : "41"
+    },
+    "read_only" : false,
+    "read_only_alternatives" : [
+    ],
+    "relative_order" : 4,
+    "source_on_save" : false,
+    "source_window" : "",
+    "type" : "r_source"
+}

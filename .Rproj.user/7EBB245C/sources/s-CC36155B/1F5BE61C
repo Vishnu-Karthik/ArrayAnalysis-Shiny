@@ -1,0 +1,23 @@
+{
+    "collab_server" : "",
+    "contents" : "",
+    "created" : 1589475158081.000,
+    "dirty" : false,
+    "encoding" : "UTF-8",
+    "folds" : "",
+    "hash" : "407648344",
+    "id" : "1F5BE61C",
+    "lastKnownWriteTime" : 1589148029,
+    "last_content_update" : 1589148029,
+    "path" : "~/projects/msc/sem4/WORKFLOW/affyAnalysisQC.R",
+    "project_path" : null,
+    "properties" : {
+    },
+    "read_only" : false,
+    "read_only_alternatives" : [
+    ],
+    "relative_order" : 1,
+    "source_on_save" : false,
+    "source_window" : "",
+    "type" : "r_source"
+}
