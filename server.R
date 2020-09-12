@@ -1586,18 +1586,8 @@ server <- function(input, output, session) {
   })
   
   ##### PREPROCESSING #####
-  # Upload CDF
-  uploadcdfenv <- function(Data,cdf_filename,cdf_path){
-    #spp <- c("Ag","At","Bt","Ce","Cf","Dr","Dm","Gg","Hs","MAmu","Mm","Os","Rn",
-    #         "Sc","Sp","Ss")
-    #names(spp) <- c("Anopheles gambiae","Arabidopsis thaliana","Bos taurus",
-    #                "Caenorhabditis elegans","Canis familiaris", "Danio rerio",
-    #                "Drosophila melanogaster","Gallus gallus","Homo sapiens",
-    #                "Macaca mulatta","Mus musculus", "Oryza sativa","Rattus norvegicus",
-    #                "Saccharomyces cerevisiae","Schizosaccharomyces pombe","Sus scrofa")
-    
-    #species <- spp[tolower(names(spp))==tolower(species)]
-    
+  # Load uploaded CDF 
+  uploadcdfenv <- function(Data,cdf_path){
     #initial value
     CDFenv <- 0
     
@@ -1605,8 +1595,8 @@ server <- function(input, output, session) {
     # even if it does not exist)
     presetCDF <- Data@cdfName
     
-    #try without a version number
-    suppressWarnings(try(CDFenv <- make.cdf.env(filename = cdf_filename,cdf.path=cdf_path,compress=FALSE,verbose = f),TRUE)) 
+    #try to load cdf file
+    try(CDFenv <- make.cdf.env(filename = basename(cdf_path),cdf.path=dirname(cdf_path)),TRUE)
     
     if ((class(CDFenv)!="environment")) {
       Data@cdfName <- presetCDF
@@ -1677,29 +1667,27 @@ server <- function(input, output, session) {
   
   # Normalize data
   normData <- eventReactive(eventExpr = input$preprocessing, {
-    Data <- rawData()
     normMeth <- input$normMeth
     CDFtype <- input$CDFtype
     species <- input$species
-    customCDF <- FALSE
     
-    if(input$annotations=="Custom annotations"){
-      customCDF <- TRUE
-    } 
-    
-    if(input$perGroup == "group"){
-      perGroup <- TRUE
-    } else if (input$perGroup == "dataset"){
-      perGroup <- FALSE
-    }
+    ifelse(input$annotations=="Custom annotations",customCDF<-TRUE,customCDF<-FALSE)
+    ifelse(input$annotations=="Upload annotation file",uploadCDF<-TRUE,uploadCDF<-FALSE)
+    ifelse(input$perGroup == "dataset",perGroup<-FALSE,perGroup<-TRUE)
     
     normMeth <- toupper(normMeth)
     #if customCDF option is chosen, apply to copy of Data, in order not to change the original data object
-    Data.copy <- Data
+    Data.copy <- rawData()
     if(customCDF){
-      print ("Change CDF before pre-processing")
+      print ("Changing CDF before pre-processing")
       Data.copy <- addUpdatedCDFenv(Data.copy, species, CDFtype)
     }
+    
+    if(uploadCDF){
+      print ("Changing CDF before pre-processing")
+      Data.copy <- uploadcdfenv(Data.copy, input$annot_file$datapath)
+    }
+    
     print ("Pre-processing is running")
     
     nGroups <- 1
@@ -1773,12 +1761,8 @@ server <- function(input, output, session) {
     CDFtype <- input$CDFtype
     normData <- normData()
     
-    customCDF <- FALSE
-    if(input$annotations=="Custom annotations"){
-      customCDF <- TRUE
-    } 
+    ifelse(input$annotations=="Custom annotations",customCDF<-TRUE,customCDF<-FALSE)
     
-    if(is.null(customCDF)) stop("The customCDF parameter must be provided")
     if(customCDF) {
       if(species=="" || is.null(species)) {
         warning("Species has not been set and custom cdf requested, attempting to deduce species for chip type")
@@ -1808,8 +1792,6 @@ server <- function(input, output, session) {
     
     #add gene name and description in case ensembl IDs have been used (otherwise there is no 1 to 1 mapping)
     if(customCDF && CDFtype=="ENSG") {
-      #load gene name and description annotations
-      library(biomaRt)
       
       spName <- ""
       if(species=="Ag" || species=="Anopheles gambiae") spName <- "agambiae"
@@ -2126,7 +2108,6 @@ server <- function(input, output, session) {
            alt = "This is alternate text")
     }
   })
-  
   
   ##### DE ANALYSIS #####
   # Design matrix

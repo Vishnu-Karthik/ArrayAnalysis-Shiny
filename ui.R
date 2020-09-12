@@ -155,8 +155,8 @@ navbarPage(theme = shinytheme("flatly"),
                     sidebarPanel(
                       width = 2,
                       tags$b("Signal comparability and bias of normalized intensities"),
-                      checkboxInput(inputId = "boxplotNorm", label = "Boxplot Norm", value = FALSE),
-                      checkboxInput(inputId = "densityNorm", label = "Density Norm", value = FALSE),
+                      checkboxInput(inputId = "boxplotNorm", label = "Boxplot Norm", value = T),
+                      checkboxInput(inputId = "densityNorm", label = "Density Norm", value = T),
                       #checkboxInput(inputId = "MAnorm", label = "MA Norm", value = FALSE),
                       actionButton(inputId = "prev6", label = 'Prev',icon = icon("arrow-left")),
                       actionButton(inputId = "next8", label = 'Next',icon = icon("arrow-right"))
@@ -173,9 +173,9 @@ navbarPage(theme = shinytheme("flatly"),
                     sidebarPanel(
                       width = 2,
                       tags$b("Normalized array correlation"),
-                      checkboxInput(inputId = "correlNorm", label = "Correlation Norm",  value = FALSE),
-                      checkboxInput(inputId = "PCAnorm", label = "PCA Norm", value = FALSE),
-                      checkboxInput(inputId = "clusterNorm", label = "Cluster Norm", value = FALSE),
+                      checkboxInput(inputId = "correlNorm", label = "Correlation Norm",  value = T),
+                      checkboxInput(inputId = "PCAnorm", label = "PCA Norm", value = T),
+                      checkboxInput(inputId = "clusterNorm", label = "Cluster Norm", value = T),
                       actionButton(inputId = "prev7", label = 'Prev',icon = icon("arrow-left")),
                       actionButton(inputId = "next9", label = 'Next',icon = icon("arrow-right"))
                     ),
