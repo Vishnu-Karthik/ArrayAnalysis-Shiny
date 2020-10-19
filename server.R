@@ -22,7 +22,7 @@ lapply(package_list, require, character.only = TRUE)
 options(shiny.maxRequestSize = 3000*1024^2)
 
 server <- function(input, output, session) {
-  ##### RAW DATA #####
+  ##### Raw data #####
   # Parse the desc file path and read the table
   desc <- reactive({
     req(input$DESCFILE)
@@ -115,7 +115,7 @@ server <- function(input, output, session) {
     return(rawData)
   })
   
-  ##### PREREQUISITES FOR QC PLOTS #####
+  ##### Prerequisites for QC plots #####
   # Get the array type
   aType <- reactive({
     Data <- rawData()
@@ -362,7 +362,7 @@ server <- function(input, output, session) {
     dev.off()
     
     list(src = RawDataSamplePrepControl,width = WIDTH,height = HEIGHT,alt = "This is alternate text")
-  })
+  },deleteFile = TRUE)
     
   # 3'5' Ratio plot beta actin
   output$ratioplot<-renderImage({
@@ -450,7 +450,7 @@ server <- function(input, output, session) {
     dev.off()
     
     list(src = RawData53ratioPlot_betaActin,width = WIDTH,height = HEIGHT,alt = "This is alternate text")
-  })
+  },deleteFile = TRUE)
   
   # 3'5' Ratio plot GADPH
   output$ratioplot2<-renderImage({
@@ -537,7 +537,7 @@ server <- function(input, output, session) {
     plotFun(4,6,1.25,"GAPDH")
     dev.off()  
     list(src = RawData53ratioPlot_GADPH,width = WIDTH,height = HEIGHT,alt = "This is alternate text")
-  })
+  },deleteFile = TRUE)
   
   # RNA degradation plot
   output$rnadegplot<- renderImage({
@@ -571,7 +571,7 @@ server <- function(input, output, session) {
          #  width = WIDTH,
          #   height = HEIGHT,
          alt = "This is alternate text")
-  })
+  },deleteFile = TRUE)
  
    
   ##### Hybridization and signal quality #####
@@ -663,7 +663,7 @@ server <- function(input, output, session) {
     dev.off()
     
     list(src = RawDataSpikeinHybridControl,width = WIDTH,height = HEIGHT,alt = "This is alternate text")
-  })
+  },deleteFile = TRUE)
   
   # Percent Present
   output$percentpresent<-renderImage({
@@ -755,7 +755,7 @@ server <- function(input, output, session) {
     dev.off()
     
     list(src = RawDataPercentPresent,width = WIDTH,height = HEIGHT,alt = "This is alternate text")
-  })
+  },deleteFile = TRUE)
   
   # Positive/Negative Distribution
   output$posnegdistro<-renderImage({
@@ -767,7 +767,7 @@ server <- function(input, output, session) {
     mtext(paste("All distributions should be similar and","extreme values should not be reached\n"), side=3, cex=0.7)
     dev.off()
     list(src = RawDataPosNegDistribution,width = WIDTH,height = HEIGHT,alt = "This is alternate text")
-  })
+  },deleteFile = TRUE)
   
   # Background intensities
   output$backgroundintensity<-renderImage({
@@ -877,7 +877,7 @@ server <- function(input, output, session) {
     dev.off()
     
     list(src = RawDataBackground,width = WIDTH,height = HEIGHT,alt = "This is alternate text") 
-  })
+  },deleteFile = TRUE)
   
   ##### Signal comparability and bias diagnostic #####
   # Inputs
@@ -984,7 +984,7 @@ server <- function(input, output, session) {
     dev.off()
     
     list(src = RawDataScaleFactors,width = WIDTH,height = HEIGHT,alt = "This is alternate text")
-  })
+  },deleteFile = TRUE)
   
   # Raw Box plot
   output$boxplotRaw<-renderImage({
@@ -1015,7 +1015,7 @@ server <- function(input, output, session) {
     dev.off()
     
     list(src = DataBoxplot,width = WIDTH,height = HEIGHT,alt = "This is alternate text")
-  })
+  },deleteFile = TRUE)
   
   # Density Histogram
   output$densityRaw<-renderImage({
@@ -1047,7 +1047,7 @@ server <- function(input, output, session) {
            cex=0.7)
     dev.off()
     list(src = DensityHistogram,width = WIDTH,height = HEIGHT,alt = "This is alternate text")
-  })
+  },deleteFile = TRUE)
   
   # Control profiles affx
   output$controlplotaffx <- renderImage({
@@ -1140,7 +1140,7 @@ server <- function(input, output, session) {
         dev.off()
         list(src = RawDataAFFXControlsProfiles,width = WIDTH,height = HEIGHT,alt = "This is alternate text")
       }
-  }, deleteFile = T)
+  }, deleteFile = TRUE)
   
   # Control profiles boxplot
   output$controlplotbox <- renderImage({
@@ -1202,7 +1202,7 @@ server <- function(input, output, session) {
         }
       }
     list(src = RawDataAFFXControlsBoxplot,width = WIDTH,height = HEIGHT,alt = "This is alternate text")
-  }, deleteFile = T)
+  }, deleteFile = TRUE)
   
   # Layout Plot
   output$layoutplot<-renderImage({
@@ -1290,7 +1290,7 @@ server <- function(input, output, session) {
     dev.off()
     
     list(src = RawDataReferenceArrayLayout,width = WIDTH,height = HEIGHT,alt = "This is alternate text")
-  }, deleteFile = T)
+  }, deleteFile = TRUE)
   
   # Positive/Negative controls
   output$posnegCOI<- renderImage({
@@ -1304,7 +1304,7 @@ server <- function(input, output, session) {
     dev.off()
     
     list(src = RawDataPosNegPositions,width = WIDTH,height = HEIGHT,alt = "This is alternate text")
-  })
+  },deleteFile = TRUE)
 
   # Spatial images
   
@@ -1335,7 +1335,7 @@ server <- function(input, output, session) {
     
     list(src = rawdataNUSE,width = WIDTH,height = HEIGHT,alt = "This is alternate text")
     
-  })
+  },deleteFile = TRUE)
   
   # Rle plot
   output$rawRle <- renderImage({
@@ -1360,7 +1360,7 @@ server <- function(input, output, session) {
     dev.off()
     
     list(src = RawDataRLE,width = WIDTH,height = HEIGHT,alt = "This is alternate text")
-  })
+  },deleteFile = TRUE)
   
   # Corelation plots
   output$correlRaw <- renderImage({
@@ -1430,7 +1430,7 @@ server <- function(input, output, session) {
       dev.off()
       list(src = rawdataCorrelation,width = WIDTH,height = HEIGHT,alt = "This is alternate text")
     }
-  })
+  },deleteFile = TRUE)
 
   # PCA raw
   output$PCAraw <- renderImage({
@@ -1519,7 +1519,7 @@ server <- function(input, output, session) {
         list(src = rawdataPCAanalysis,width = WIDTH,height = HEIGHT,alt = "This is alternate text")
       }
     }
-  })
+  },deleteFile = TRUE)
 
   # Hierarchical clustering
   output$clusterRaw <- renderImage({
@@ -1583,9 +1583,9 @@ server <- function(input, output, session) {
       
       list(src = rawClustering,width = WIDTH,height = HEIGHT,alt = "This is alternate text")
     }
-  })
+  },deleteFile = TRUE)
   
-  ##### PREPROCESSING #####
+  ##### Normalization and Annotation #####
   # Load uploaded CDF 
   uploadcdfenv <- function(Data,cdf_path){
     #initial value
@@ -2109,7 +2109,7 @@ server <- function(input, output, session) {
     }
   })
   
-  ##### DE ANALYSIS #####
+  ##### Statistical Analysis #####
   # Design matrix
   designMatrix <- reactive({
     validate(need(input$DESCFILE, message = "Description file required"))
@@ -2136,16 +2136,17 @@ server <- function(input, output, session) {
             dimnames = list(NULL, gsub("experimentFactor","",colnames(design)))
       )
   })
-  output$contrasts <- renderUI({
-                  matrixInput(inputId = "contMatrix",
-                              value = m(),
-                              rows = list(extend = TRUE),
-                              cols = list(names = TRUE)
-                  )
+  
+  output$contrasts <- renderUI({matrixInput(
+                                inputId = "contMatrix",
+                                value = m(),
+                                rows = list(extend = TRUE),
+                                cols = list(names = TRUE))
   })
 
   # List of differential analysis tables
-  diffTable <- eventReactive(eventExpr = input$startStat, {
+  #bgdTable <- eventReactive(eventExpr = input$startStat,{
+  bgdTable <- reactive({
     normDataTable <- normDataTable()
     description <- desc()
     
@@ -2174,84 +2175,124 @@ server <- function(input, output, session) {
       tab <- topTable(fit,number = Inf, coef = i)
     })
   })
+  
+  diffTable <- reactive({
+    lapply(bgdTable(), function(x){
+      diffTable <- x[x$adj.P.Val < input$pvalCutoff,]
+    })
+  }) 
  
   # Outputs for the stat page
   output$statOutput <- renderUI({
-    l <- length(diffTable())
-    tagList(
-    # Stat tables
-      lapply(diffTable(), function(i){
-        output[[l]] <- renderTable({head(i,10)}, digits = 15, include.rownames = TRUE)
-      }),
-      
-    # p-value 
-      lapply(diffTable(), function(i){
-        renderImage({
-          pvalhistogram <- tempfile(fileext = ".png")
-          adjPval <- i$adj.P.Val
-          png(pvalhistogram,width=WIDTH,height=HEIGHT)
-          hist (adjPval,main=paste("Adjusted P.Value Histogram"), xlab = "adj.p-values",col="blue")
-          dev.off()
+      myTabs <- lapply(1:length(diffTable()), function(x){
+        tabPanel(paste0("Tab ",x), 
+               renderTable({
+                 head(diffTable()[[x]],10)
+               }, digits = 15, include.rownames = TRUE),
+               
+               renderImage({
+                 pvalhistogram <- tempfile(fileext = ".png")
+                 adjPval <- diffTable()[[x]]$adj.P.Val
+                 png(pvalhistogram,width=WIDTH,height=HEIGHT)
+                 hist (adjPval,
+                       main=paste("Adjusted P.Value Histogram"), 
+                       xlab = "adj.p-values",
+                       col="blue",
+                       breaks=60)
+                 dev.off()
        
-          list(src = pvalhistogram,width = WIDTH,height = HEIGHT,alt = "This is alternate text")
-        },outputArgs = list(width = "100%", height = "auto"))
-      }),
-    
-    # logFC histograms
-      lapply(diffTable(), function(i){
-        renderImage({
-          logFChistogram <- tempfile(fileext = ".png")
-          logFCval <- i$logFC
-          png(logFChistogram,width=1000,height=1000)
-          hist (logFCval,main=paste("adapted fold change histogram"),xlab = "adapted fold changes",col="green", breaks=60)
-          dev.off()
-        
-          list(src = logFChistogram,width = WIDTH,height = HEIGHT,alt = "This is alternate text")
-        },outputArgs = list(width = "100%", height = "auto"))
+                list(src = pvalhistogram,width = WIDTH,
+                     height = HEIGHT,
+                     alt = "This is alternate text")
+               },outputArgs = list(width = "100%",height = "auto"),deleteFile = TRUE),
+               
+               renderImage({
+                 logFChistogram <- tempfile(fileext = ".png")
+                 logFCval <- diffTable()[[x]]$logFC
+                 png(logFChistogram,width=1000,height=1000)
+                 hist (logFCval,
+                       main=paste("adapted fold change histogram"),
+                       xlab = "adapted fold changes",
+                       col="green",
+                       breaks=60)
+                 dev.off()
+                 
+                 list(src = logFChistogram,
+                      width = WIDTH,
+                      height = HEIGHT,
+                      alt = "This is alternate text")
+               },outputArgs = list(width = "100%", height = "auto"),deleteFile = TRUE)
+               
+               )
       })
+      
+    tagList(
+      do.call(tabsetPanel, myTabs)
     )
   })
   
-  ##### GO ANALYSIS #####
-  geneList <- eventReactive(eventExpr = input$goAnalysis, {
+  ##### ClusterProfiler #####
+  sigGeneList <- reactive({
     lapply(diffTable(), function(i){
-      statData <- rownames(i)
-      statData <- cbind(statData,i)
+      sigGeneList <- rownames(i)
+      print(head(sigGeneList))
+      return(sigGeneList)
     })
   })
-  sig.genes <- eventReactive(eventExpr = input$goAnalysis, {
-      lapply(geneList(), function(i){i[i$adj.P.Value <= input$Pvalcutoff,1]})
-  })
     
-  bkgd.genes <- eventReactive(eventExpr = input$goAnalysis, {
-        lapply(geneList(), function(i){i[,1]})
+  bkgd.genes <- reactive({
+    lapply(bgdTable(), function(i){
+      bkgd.genes <- rownames(i)
+      print(head(bkgd.genes))
+      return(bkgd.genes)
+    })
   })
   
-
+  ego <- reactive({
+    ego <- vector(mode = "list", length = length(diffTable()))
+    print(ego)
+    for (i in 1:length(diffTable())) {
+      ego[[i]] <- enrichGO(
+        gene = sigGeneList()[[i]], 
+        universe = bkgd.genes()[[i]], 
+        keyType = "ENTREZID",
+        OrgDb = org.Hs.eg.db,
+        ont = input$ont,
+        pAdjustMethod = "fdr",
+        pvalueCutoff = 0.05,
+        readable = TRUE)
+    }
+    return(ego)
+    })
+               
   output$goOutput <- renderUI({
-    k <- length(sig.genes())
+    myTabs2 <- lapply(1:length(ego()), function(x){
+      tabPanel(paste0("Tab ",x), 
+               renderImage({
+                 GOdotplot <- tempfile(fileext = ".png")
+                 png(GOdotplot,width=WIDTH,height=HEIGHT)
+                 dotplot(ego()[[x]], showCategory = 20)
+                 dev.off()
+                 
+                 list(src = GOdotplot,
+                      width = WIDTH,
+                      height = HEIGHT,
+                      alt = "This is alternate text")
+               },outputArgs = list(width = "100%", height = "auto"),deleteFile = TRUE),
+               
+               renderTable({
+                 head(ego()[[x]]@result,10)
+               }, digits = 15, include.rownames = TRUE)
+      )
+    })
     tagList(
-      mapply(function(i,j){
-        ego <- clusterProfiler::enrichGO(
-          gene     = i, 
-          universe = j, 
-          OrgDb    = org.Hs.eg.db,
-          ont      = input$ont,
-          pAdjustMethod = "fdr",
-          pvalueCutoff = input$gopvalCutoff,
-          readable = TRUE)
-        
-        output[[k]] <- renderText(head(ego))
-        
-        output[[k+1]] <- renderImage({barplot(ego, showCategory = 20)})
-    
-      }, sig.genes(),bkgd.genes())
+      do.call(tabsetPanel, myTabs2)
     )
   })
   
-  ##### PATHWAY ANALYSIS #####
-  ##### NETWORK ANALYSIS #####
-  ##### NAVIGATION #####
+  ##### PathVisio #####
+  ##### Cytoscape #####
+  ##### Navigation #####
   observeEvent(input$next2, {
     updateTabsetPanel(session,
                       inputId = "Mainset", 
